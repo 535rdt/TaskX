@@ -4,7 +4,9 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -182,6 +184,7 @@ fun HomeScreen(
         drawerState = drawerState,
         drawerContent = {
             ProfileDrawerContent(
+                tasks = allTasks,
                 onNavigateToSettings = {
                     scope.launch { drawerState.close() }
                     onNavigateToSettings()
@@ -197,6 +200,20 @@ fun HomeScreen(
                 onNavigateToFocus = {
                     scope.launch { drawerState.close() }
                     onNavigateToFocus(null)
+                },
+                onNavigateToCompleted = {
+                    scope.launch { drawerState.close() }
+                    onNavigateToCompleted()
+                },
+                isLiveSyncing = isLiveSyncing,
+                onTriggerSync = {
+                    viewModel.triggerManualSync(context, currentBookId) { result ->
+                        Toast.makeText(
+                            context,
+                            if (result.success) "Cloud sync completed" else "Sync note: ${result.message}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 },
                 onExportData = {
                     Toast.makeText(context, "Exporting data...", Toast.LENGTH_SHORT).show()
@@ -1440,20 +1457,67 @@ fun ListsDrawerContent(
 }
 
 // -------------------------------------------------------------
-// Right Sliding Drawer: Profile & Settings Window
+// Advanced Executive Drawer: Profile, Productivity & Settings Hub
 // -------------------------------------------------------------
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileDrawerContent(
+    tasks: List<TaskEntity> = emptyList(),
     onNavigateToSettings: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToAnalytics: () -> Unit = {},
     onNavigateToFocus: () -> Unit = {},
+    onNavigateToCompleted: () -> Unit = {},
+    isLiveSyncing: Boolean = false,
+    onTriggerSync: () -> Unit = {},
     onExportData: () -> Unit,
     onImportData: () -> Unit,
     onLogOut: () -> Unit
 ) {
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.ExitToApp,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Log Out of TaskX?", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Text(
+                    "Are you sure you want to log out? Your tasks are stored safely in cloud sync and you can log back in at any time.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLogoutDialog = false
+                        onLogOut()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Log Out")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showLogoutDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     ModalDrawerSheet(
-        modifier = Modifier.width(320.dp),
+        modifier = Modifier.width(330.dp),
         drawerContainerColor = MaterialTheme.colorScheme.surface
     ) {
         Column(
@@ -1461,109 +1525,592 @@ fun ProfileDrawerContent(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            // Profile Header
             val dNameState by SettingsRepository.userNameFlow.collectAsState()
             val dEmailState by SettingsRepository.userEmailFlow.collectAsState()
-            val dName = dNameState ?: "User"
-            val dEmail = dEmailState ?: "Active Account"
+            val dName = dNameState?.takeIf { it.isNotBlank() } ?: "User"
+            val dEmail = dEmailState?.takeIf { it.isNotBlank() } ?: "Active Account"
 
+            // 1. Executive Gradient Hero Header
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.primary)
-                    .padding(horizontal = 24.dp, vertical = 40.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.88f),
+                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.95f)
+                            )
+                        )
+                    )
+                    .padding(horizontal = 20.dp, vertical = 24.dp)
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth()
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // Avatar with Active Glow
+                        Box {
+                            Box(
+                                modifier = Modifier
+                                    .size(62.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .border(2.dp, Color.White.copy(alpha = 0.85f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = dName.firstOrNull()?.uppercase() ?: "U",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            // Online Indicator
+                            Box(
+                                modifier = Modifier
+                                    .size(15.dp)
+                                    .align(Alignment.BottomEnd)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF10B981))
+                                    .border(2.dp, Color.White, CircleShape)
+                            )
+                        }
+
+                        Spacer(Modifier.width(14.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = dName,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = dEmail,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.85f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color.White.copy(alpha = 0.22f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = "TaskX Pro",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
+
+                        // Tap-to-view Profile
+                        IconButton(
+                            onClick = onNavigateToProfile,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.2f))
+                        ) {
+                            Icon(
+                                Icons.Outlined.Person,
+                                contentDescription = "View Profile",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    // Productivity Velocity Metrics Card
+                    val completedCount = tasks.count { it.isCompleted }
+                    val pendingCount = tasks.count { !it.isCompleted }
+                    val totalCount = tasks.size
+                    val progressRatio = if (totalCount > 0) completedCount.toFloat() / totalCount else 0f
+                    val percentage = (progressRatio * 100).toInt()
+
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.22f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Productivity Velocity",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White.copy(alpha = 0.9f),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "$percentage% Done",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = { progressRatio },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                color = Color(0xFF10B981),
+                                trackColor = Color.White.copy(alpha = 0.2f),
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(horizontalAlignment = Alignment.Start) {
+                                    Text(
+                                        text = "$totalCount",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Total Tasks",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.7f)
+                                    )
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "$completedCount",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = Color(0xFF34D399),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Completed",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.7f)
+                                    )
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = "$pendingCount",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = Color(0xFFFBBF24),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Pending",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // 2. Power Hub: Quick Navigation Cards
+            Text(
+                text = "WORKSPACE & PRODUCTIVITY",
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Focus Mode Card
+                Card(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(onClick = onNavigateToFocus),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Icon(
+                            Icons.Outlined.Timer,
+                            contentDescription = "Focus",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Focus",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Pomodoro timer",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Analytics Card
+                Card(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(onClick = onNavigateToAnalytics),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Icon(
+                            Icons.Outlined.Leaderboard,
+                            contentDescription = "Analytics",
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Analytics",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Productivity stats",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // Completed Tasks Tile
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .clickable(onClick = onNavigateToCompleted),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(72.dp)
-                            .background(MaterialTheme.colorScheme.onPrimary, shape = CircleShape),
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF10B981).copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = dName.firstOrNull()?.uppercase() ?: "U",
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Bold
+                        Icon(
+                            Icons.Filled.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF10B981),
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = dName,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = dEmail,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Completed Archive",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "${tasks.count { it.isCompleted }} finished tasks stored",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        Icons.Filled.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
 
             Spacer(Modifier.height(8.dp))
-            Text(
-                text = "Profile & Account",
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold
-            )
 
-            // 1. View Full Profile
-            ListItem(
-                headlineContent = { Text("View Full Profile") },
-                supportingContent = { Text("Avatar, statistics, and details") },
-                leadingContent = { Icon(Icons.Outlined.Person, contentDescription = "Profile", tint = MaterialTheme.colorScheme.primary) },
-                modifier = Modifier.clickable(onClick = onNavigateToProfile)
-            )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
-
-            // 2. App Settings
-            ListItem(
-                headlineContent = { Text("App Settings") },
-                supportingContent = { Text("Theme, Reminders, Notifications, Account") },
-                leadingContent = { Icon(Icons.Outlined.Settings, contentDescription = "Settings", tint = MaterialTheme.colorScheme.primary) },
-                modifier = Modifier.clickable(onClick = onNavigateToSettings)
-            )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
-
-            // 3. Backup Data
-            ListItem(
-                headlineContent = { Text("Backup Data (Export)") },
-                supportingContent = { Text("Save tasks as JSON") },
-                leadingContent = { Icon(Icons.Outlined.Upload, contentDescription = "Export") },
-                modifier = Modifier.clickable(onClick = onExportData)
-            )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
-
-            // 4. Restore Data
-            ListItem(
-                headlineContent = { Text("Restore Data (Import)") },
-                supportingContent = { Text("Load tasks from JSON") },
-                leadingContent = { Icon(Icons.Outlined.Download, contentDescription = "Import") },
-                modifier = Modifier.clickable(onClick = onImportData)
-            )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Log Out Button
-            Button(
-                onClick = onLogOut,
+            // 3. Cloud Sync Interactive Status Card
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isLiveSyncing) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             ) {
-                Icon(Icons.Filled.ExitToApp, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Log Out")
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isLiveSyncing) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                else Color(0xFF10B981).copy(alpha = 0.15f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isLiveSyncing) Icons.Filled.Refresh else Icons.Filled.CheckCircle,
+                            contentDescription = "Sync Status",
+                            tint = if (isLiveSyncing) MaterialTheme.colorScheme.primary else Color(0xFF10B981),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isLiveSyncing) "Syncing with Cloud..." else "Cloud Sync Active",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = if (isLiveSyncing) "Updating real-time data" else "Supabase cloud ready",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(
+                        onClick = onTriggerSync,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Sync,
+                            contentDescription = "Sync Now",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
             }
+
+            Spacer(Modifier.height(8.dp))
+
+            // 4. Quick Appearance / Theme Mode Segmented Controller
+            Text(
+                text = "APPEARANCE & THEME",
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+
+            val currentTheme by SettingsRepository.themeFlow.collectAsState()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                listOf(
+                    Triple("Light", Icons.Outlined.WbSunny, "Light"),
+                    Triple("Dark", Icons.Outlined.Palette, "Dark"),
+                    Triple("System", Icons.Outlined.Settings, "Auto")
+                ).forEach { (themeKey, icon, label) ->
+                    val isSelected = currentTheme.equals(themeKey, ignoreCase = true)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (isSelected) MaterialTheme.colorScheme.surface
+                                else Color.Transparent
+                            )
+                            .clickable { SettingsRepository.setTheme(themeKey) }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                icon,
+                                contentDescription = label,
+                                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // 5. App Settings & Tools
+            Text(
+                text = "SETTINGS & DATA",
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+
+            ListItem(
+                headlineContent = { Text("Full Profile & Account", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
+                supportingContent = { Text("Avatar, personal stats, and details", style = MaterialTheme.typography.labelSmall) },
+                leadingContent = {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Outlined.Person, contentDescription = "Profile", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    }
+                },
+                trailingContent = { Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(18.dp)) },
+                modifier = Modifier.clickable(onClick = onNavigateToProfile)
+            )
+
+            ListItem(
+                headlineContent = { Text("App Settings", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
+                supportingContent = { Text("Notifications, reminders, sounds, security", style = MaterialTheme.typography.labelSmall) },
+                leadingContent = {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Outlined.Settings, contentDescription = "Settings", tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
+                    }
+                },
+                trailingContent = { Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(18.dp)) },
+                modifier = Modifier.clickable(onClick = onNavigateToSettings)
+            )
+
+            ListItem(
+                headlineContent = { Text("Backup Tasks (Export JSON)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
+                supportingContent = { Text("Save local JSON database backup", style = MaterialTheme.typography.labelSmall) },
+                leadingContent = {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Outlined.Upload, contentDescription = "Export", tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(20.dp))
+                    }
+                },
+                modifier = Modifier.clickable(onClick = onExportData)
+            )
+
+            ListItem(
+                headlineContent = { Text("Restore Tasks (Import JSON)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) },
+                supportingContent = { Text("Import tasks from saved backup", style = MaterialTheme.typography.labelSmall) },
+                leadingContent = {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Outlined.Download, contentDescription = "Import", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                    }
+                },
+                modifier = Modifier.clickable(onClick = onImportData)
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            // 6. Safe Log Out Button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { showLogoutDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Filled.ExitToApp, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Log Out", fontWeight = FontWeight.SemiBold)
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // 7. Version & Build Tagline
+            Text(
+                text = "TaskX • v1.0.0 (Build 2026)\nCrafted for peak productivity",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
         }
     }
 }
