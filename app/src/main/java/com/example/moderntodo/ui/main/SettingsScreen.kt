@@ -17,6 +17,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.app.AlarmManager
+import androidx.core.app.NotificationManagerCompat
+import com.example.moderntodo.receiver.AlarmReceiver
 import com.example.moderntodo.util.SettingsRepository
 import java.text.SimpleDateFormat
 import java.util.*
@@ -155,14 +162,71 @@ fun SettingsScreen(onBack: () -> Unit) {
                     ).show()
                 }
             )
+            val sysNotificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            val canScheduleExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                alarmManager?.canScheduleExactAlarms() ?: true
+            } else true
+
             SettingsItem(
                 icon = Icons.Outlined.Notifications,
-                title = "Notifications",
-                subtitle = if (notificationsEnabled) "Enabled" else "Disabled",
+                title = "App Notifications",
+                subtitle = if (notificationsEnabled) "Active in TaskX" else "Disabled in TaskX",
                 onClick = {
                     val newState = !notificationsEnabled
                     SettingsRepository.setNotificationsEnabled(newState)
                     Toast.makeText(context, if (newState) "Notifications turned on" else "Notifications turned off", Toast.LENGTH_SHORT).show()
+                }
+            )
+
+            SettingsItem(
+                icon = if (sysNotificationsEnabled) Icons.Outlined.CheckCircle else Icons.Outlined.Warning,
+                title = "Phone Notification Permission",
+                subtitle = if (sysNotificationsEnabled) "Granted by Android OS" else "Blocked by Phone! Tap to enable",
+                onClick = {
+                    try {
+                        val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                            putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        }
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Open Phone Settings > Apps > TaskX > Notifications", Toast.LENGTH_LONG).show()
+                    }
+                }
+            )
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                SettingsItem(
+                    icon = if (canScheduleExact) Icons.Outlined.CheckCircle else Icons.Outlined.Warning,
+                    title = "Exact Alarms (Alarms & Reminders)",
+                    subtitle = if (canScheduleExact) "Allowed for exact second timing" else "Restricted by Android! Tap to allow exact alerts",
+                    onClick = {
+                        try {
+                            val intent = Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Open Phone Settings > Apps > Special Access > Alarms & Reminders", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                )
+            }
+
+            SettingsItem(
+                icon = Icons.Outlined.NotificationsActive,
+                title = "Test Notification & Alert Sound",
+                subtitle = "Tap to verify banner, sound & vibration",
+                onClick = {
+                    AlarmReceiver.showNotification(
+                        context = context,
+                        taskId = 88888,
+                        title = "TaskX Reminder Test",
+                        desc = "Your task notification & sound alert is working perfectly!",
+                        ringtoneUriStr = null,
+                        hasAlarm = false
+                    )
+                    Toast.makeText(context, "Test alert sent! Check your notification bar.", Toast.LENGTH_SHORT).show()
                 }
             )
 

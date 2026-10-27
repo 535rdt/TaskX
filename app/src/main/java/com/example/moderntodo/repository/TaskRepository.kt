@@ -220,6 +220,10 @@ class TaskRepository(
         }
     }
 
+    suspend fun getAllTasksList(): List<TaskEntity> {
+        return taskDao.getAllTasksList()
+    }
+
     suspend fun importTasks(tasks: List<TaskEntity>) {
         try {
             taskDao.insertTasks(tasks)

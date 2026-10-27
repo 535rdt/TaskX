@@ -478,7 +478,7 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                 
                 // Refresh alarms
                 com.example.moderntodo.util.AlarmScheduler.cancel(context, updated.id ?: 0)
-                if (hasAlarm || updated.dueTime != null) {
+                if (hasAlarm || updated.dueTime != null || updated.dueDate != null) {
                     com.example.moderntodo.util.AlarmScheduler.schedule(context, updated)
                 }
                 com.example.moderntodo.data.remote.SharedBookRealtimeCoordinator.notifyLocalMutation(
@@ -520,7 +520,7 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                 )
                 val id = repository.insertTask(task)
                 val insertedTask = task.copy(id = id.toInt())
-                if (hasAlarm || insertedTask.dueTime != null) {
+                if (hasAlarm || insertedTask.dueTime != null || insertedTask.dueDate != null) {
                     com.example.moderntodo.util.AlarmScheduler.schedule(context, insertedTask)
                 }
                 com.example.moderntodo.data.remote.SharedBookRealtimeCoordinator.notifyLocalMutation(
@@ -743,7 +743,11 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                 isProjectTask = isProjectTask,
                 projectId = if (isProjectTask) bookId else null
             )
-            repository.insertTask(task)
+            val id = repository.insertTask(task)
+            val insertedTask = task.copy(id = id.toInt())
+            if (insertedTask.dueDate != null || insertedTask.dueTime != null || insertedTask.hasAlarm) {
+                com.example.moderntodo.util.AlarmScheduler.schedule(com.example.moderntodo.ModernToDoApp.instance, insertedTask)
+            }
             com.example.moderntodo.data.remote.SharedBookRealtimeCoordinator.notifyLocalMutation(
                 com.example.moderntodo.ModernToDoApp.instance,
                 repository,
