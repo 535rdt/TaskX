@@ -17,3 +17,5 @@ app/build
 *.png
 *.jpg
 HomeScreen_original.kt
+
+*.apk

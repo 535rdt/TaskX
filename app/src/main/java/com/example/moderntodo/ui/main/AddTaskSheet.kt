@@ -1141,16 +1141,126 @@ fun AddTaskSheet(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Repeat Configuration
-                        OutlinedButton(
-                            onClick = { showRepeatConfig = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
+                        // Repeat Configuration with ON/OFF Switch & Quick Presets
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isRepeating) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isRepeating) MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(Icons.Filled.Repeat, null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            val repeatLabel = if (isRepeating) "Repeats every $repeatInterval $repeatUnit" else "Does not repeat"
-                            Text(repeatLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Repeat,
+                                            contentDescription = null,
+                                            tint = if (isRepeating) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = "Repeat Task",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            val repeatLabel = if (isRepeating) "Repeats every $repeatInterval $repeatUnit" else "Repeat is OFF (one-time task)"
+                                            Text(
+                                                text = repeatLabel,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    Switch(
+                                        checked = isRepeating,
+                                        onCheckedChange = { checked ->
+                                            isRepeating = checked
+                                            if (checked) {
+                                                if (repeatInterval <= 0) repeatInterval = 1
+                                                if (repeatUnit.isBlank()) repeatUnit = "Days"
+                                            }
+                                        }
+                                    )
+                                }
+
+                                if (isRepeating) {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text(
+                                        text = "Quick Presets:",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        FilterChip(
+                                            selected = repeatInterval == 1 && repeatUnit == "Days" && repeatDaysOfWeek == null,
+                                            onClick = {
+                                                repeatInterval = 1
+                                                repeatUnit = "Days"
+                                                repeatDaysOfWeek = null
+                                            },
+                                            label = { Text("Daily", style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                        FilterChip(
+                                            selected = repeatInterval == 1 && repeatUnit == "Weeks" && repeatDaysOfWeek == null,
+                                            onClick = {
+                                                repeatInterval = 1
+                                                repeatUnit = "Weeks"
+                                                repeatDaysOfWeek = null
+                                            },
+                                            label = { Text("Weekly", style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                        FilterChip(
+                                            selected = repeatInterval == 1 && repeatUnit == "Months",
+                                            onClick = {
+                                                repeatInterval = 1
+                                                repeatUnit = "Months"
+                                                repeatDaysOfWeek = null
+                                            },
+                                            label = { Text("Monthly", style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                        FilterChip(
+                                            selected = repeatDaysOfWeek == "Mon,Tue,Wed,Thu,Fri",
+                                            onClick = {
+                                                repeatInterval = 1
+                                                repeatUnit = "Weeks"
+                                                repeatDaysOfWeek = "Mon,Tue,Wed,Thu,Fri"
+                                            },
+                                            label = { Text("Weekdays", style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    OutlinedButton(
+                                        onClick = { showRepeatConfig = true },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(vertical = 6.dp, horizontal = 12.dp)
+                                    ) {
+                                        Icon(Icons.Outlined.Tune, null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Custom Repeat Schedule...", style = MaterialTheme.typography.labelMedium)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1629,7 +1739,15 @@ fun AddTaskSheet(
                     Button(
                         onClick = {
                             if (title.isNotBlank()) {
-                                val rMode = if (isRepeating) "Custom" else null
+                                val rMode = if (isRepeating) {
+                                    if (repeatDaysOfWeek != null && repeatDaysOfWeek!!.isNotBlank()) "Weekdays"
+                                    else when (repeatUnit) {
+                                        "Weeks" -> if (repeatInterval == 1) "Weekly" else "Every $repeatInterval Weeks"
+                                        "Months" -> if (repeatInterval == 1) "Monthly" else "Every $repeatInterval Months"
+                                        "Years" -> if (repeatInterval == 1) "Yearly" else "Every $repeatInterval Years"
+                                        else -> if (repeatInterval == 1) "Daily" else "Every $repeatInterval Days"
+                                    }
+                                } else null
                                 val serializedSubTasks = subTasks.map { "${it.value.first}|${it.value.second}" }.joinToString(";;")
                                 onSave(
                                     title.trim(),

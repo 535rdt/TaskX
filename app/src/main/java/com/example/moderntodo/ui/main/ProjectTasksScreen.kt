@@ -1,6 +1,9 @@
 package com.example.moderntodo.ui.main
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -67,7 +70,7 @@ sealed class ProjectFeedItem {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ProjectTasksScreen(
     viewModel: TaskViewModel,
@@ -92,6 +95,19 @@ fun ProjectTasksScreen(
     var projectViewMode by remember { mutableStateOf("All") } // "All", "Tasks", or "Notes"
     var showFilterSheet by remember { mutableStateOf(false) }
 
+    // Multi-select project tasks deletion state
+    val selectedProjectTaskIds = remember { mutableStateListOf<Int>() }
+    val isProjectSelectionMode = selectedProjectTaskIds.isNotEmpty()
+    var showProjectDeleteMultipleConfirm by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = isProjectSelectionMode) {
+        selectedProjectTaskIds.clear()
+    }
+
+    LaunchedEffect(selectedProjectId) {
+        selectedProjectTaskIds.clear()
+    }
+
     val filteredNotes = remember(projectNotes, allProjectNotes, selectedProjectId, searchQuery) {
         val base = if (selectedProjectId != null) {
             projectNotes.filter { it.projectId == selectedProjectId }
@@ -109,6 +125,86 @@ fun ProjectTasksScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        if (isProjectSelectionMode) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                tonalElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { selectedProjectTaskIds.clear() }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Close Selection")
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "${selectedProjectTaskIds.size} Selected",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val allProjTasks = projectTasks
+                        val allSelected = allProjTasks.isNotEmpty() && allProjTasks.all { it.id in selectedProjectTaskIds }
+                        IconButton(onClick = {
+                            if (allSelected) {
+                                selectedProjectTaskIds.clear()
+                            } else {
+                                selectedProjectTaskIds.clear()
+                                selectedProjectTaskIds.addAll(allProjTasks.mapNotNull { it.id })
+                            }
+                        }) {
+                            Icon(
+                                imageVector = if (allSelected) Icons.Filled.Deselect else Icons.Filled.SelectAll,
+                                contentDescription = if (allSelected) "Deselect All" else "Select All"
+                            )
+                        }
+                        IconButton(onClick = { showProjectDeleteMultipleConfirm = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = "Delete Selected",
+                                tint = Color(0xFFEF4444)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showProjectDeleteMultipleConfirm) {
+            AlertDialog(
+                onDismissRequest = { showProjectDeleteMultipleConfirm = false },
+                title = { Text("Delete ${selectedProjectTaskIds.size} Tasks?") },
+                text = { Text("Are you sure you want to permanently delete these ${selectedProjectTaskIds.size} selected project tasks? This action cannot be undone.") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val tasksToDelete = projectTasks.filter { it.id in selectedProjectTaskIds }
+                            viewModel.deleteTasks(tasksToDelete, context)
+                            val count = tasksToDelete.size
+                            selectedProjectTaskIds.clear()
+                            showProjectDeleteMultipleConfirm = false
+                            Toast.makeText(context, "Deleted $count tasks", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+                    ) {
+                        Text("Delete", color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showProjectDeleteMultipleConfirm = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
         // -------------------------------------------------------------
         // 1. Projects Horizontal Selector Strip
         // -------------------------------------------------------------
@@ -501,6 +597,7 @@ fun ProjectTasksScreen(
                     when (item) {
                         is ProjectFeedItem.Task -> {
                             val task = item.task
+                            val isSelected = selectedProjectTaskIds.contains(task.id)
                             val dismissState = rememberSwipeToDismissBoxState(
                                 confirmValueChange = {
                                     if (it == SwipeToDismissBoxValue.EndToStart) {
@@ -515,7 +612,7 @@ fun ProjectTasksScreen(
                             SwipeToDismissBox(
                                 state = dismissState,
                                 enableDismissFromStartToEnd = false,
-                                enableDismissFromEndToStart = true,
+                                enableDismissFromEndToStart = !isProjectSelectionMode,
                                 backgroundContent = {
                                     if (isDismissing) {
                                         Box(
@@ -537,8 +634,29 @@ fun ProjectTasksScreen(
                                         task = task,
                                         projectName = targetProj?.name ?: "Project",
                                         projectColorHex = targetProj?.id?.let { ProjectPreferences.getColorHex(it) } ?: "#2563EB",
+                                        isSelectionMode = isProjectSelectionMode,
+                                        isSelected = isSelected,
+                                        onToggleSelect = {
+                                            if (task.id != null) {
+                                                if (isSelected) selectedProjectTaskIds.remove(task.id) else selectedProjectTaskIds.add(task.id)
+                                            }
+                                        },
+                                        onLongClick = {
+                                            if (task.id != null && !isProjectSelectionMode) {
+                                                selectedProjectTaskIds.add(task.id)
+                                            }
+                                        },
                                         onToggle = { viewModel.toggleTaskCompletion(context, task) },
-                                        onClick = { onEditTask(task) },
+                                        onClick = {
+                                            if (isProjectSelectionMode) {
+                                                if (task.id != null) {
+                                                    if (isSelected) selectedProjectTaskIds.remove(task.id) else selectedProjectTaskIds.add(task.id)
+                                                }
+                                            } else {
+                                                onEditTask(task)
+                                            }
+                                        },
+                                        onRepeatToggle = { mode -> viewModel.toggleTaskRepeat(task, mode) },
                                         onStatusChange = { newStatus -> viewModel.updateTaskStatus(task, newStatus) },
                                         onCommentChange = { newComment -> viewModel.updateTaskComment(task, newComment) },
                                         onPriorityChange = { newPriority -> viewModel.updateTaskPriority(task, newPriority) },
@@ -668,6 +786,7 @@ fun ProjectTasksScreen(
 // -------------------------------------------------------------
 // Dedicated Project Task Card (Compact, Simple Size)
 // -------------------------------------------------------------
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ProjectTaskRow(
     task: TaskEntity,
@@ -675,6 +794,11 @@ fun ProjectTaskRow(
     projectColorHex: String,
     onClick: () -> Unit,
     onToggle: () -> Unit,
+    isSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: () -> Unit = {},
+    onLongClick: () -> Unit = {},
+    onRepeatToggle: (String?) -> Unit = {},
     onStatusChange: (String) -> Unit = {},
     onCommentChange: (String) -> Unit = {},
     onPriorityChange: (Int) -> Unit = {},
@@ -691,15 +815,34 @@ fun ProjectTaskRow(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showStatusMenu by remember { mutableStateOf(false) }
     var showCommentDialog by remember { mutableStateOf(false) }
+    var showRepeatMenu by remember { mutableStateOf(false) }
+
+    val cardBorder = if (isSelected) {
+        androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+    } else {
+        androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    }
+
+    val cardColor = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
 
     Card(
-        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 3.dp),
+            .padding(horizontal = 14.dp, vertical = 3.dp)
+            .combinedClickable(
+                onClick = {
+                    if (isSelectionMode) onToggleSelect() else onClick()
+                },
+                onLongClick = onLongClick
+            ),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        colors = CardDefaults.cardColors(containerColor = cardColor),
+        border = cardBorder,
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 2.dp else 1.dp)
     ) {
         Row(
             modifier = Modifier
@@ -720,17 +863,24 @@ fun ProjectTaskRow(
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Complete toggle checkbox
-                IconButton(
-                    onClick = onToggle,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = if (task.isCompleted) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
-                        contentDescription = "Complete",
-                        tint = if (task.isCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(22.dp)
+                if (isSelectionMode) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { onToggleSelect() },
+                        modifier = Modifier.size(28.dp)
                     )
+                } else {
+                    IconButton(
+                        onClick = onToggle,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (task.isCompleted) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                            contentDescription = "Complete",
+                            tint = if (task.isCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))
@@ -748,6 +898,12 @@ fun ProjectTaskRow(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
+
+                    // Live countdown timer showing hours, minutes, seconds remaining
+                    if (!task.isCompleted && (task.dueTime != null || task.dueDate != null)) {
+                        Spacer(modifier = Modifier.height(3.dp))
+                        LiveCountdownTimerBadge(task = task)
+                    }
 
                     val hasSubInfo = task.description.isNotBlank() ||
                             task.dueDate != null ||
@@ -865,13 +1021,71 @@ fun ProjectTaskRow(
                                 }
                             }
 
-                            if (task.repeatMode != null) {
-                                Icon(
-                                    imageVector = Icons.Filled.Repeat,
-                                    contentDescription = "Repeat",
-                                    modifier = Modifier.size(11.dp),
-                                    tint = MaterialTheme.colorScheme.secondary
-                                )
+                            // Interactive Repeat Badge
+                            val isRepeating = !task.repeatMode.isNullOrBlank() && task.repeatMode != "None"
+                            Box {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = if (isRepeating) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.clickable { showRepeatMenu = true }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Repeat,
+                                            contentDescription = "Repeat",
+                                            modifier = Modifier.size(11.dp),
+                                            tint = if (isRepeating) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.outline
+                                        )
+                                        Text(
+                                            text = if (isRepeating) (task.repeatMode ?: "Repeat") else "Repeat Off",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isRepeating) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.outline,
+                                            fontWeight = if (isRepeating) FontWeight.SemiBold else FontWeight.Normal,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                }
+
+                                DropdownMenu(
+                                    expanded = showRepeatMenu,
+                                    onDismissRequest = { showRepeatMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Repeat: OFF", color = if (!isRepeating) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) },
+                                        leadingIcon = { Icon(Icons.Outlined.Close, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp)) },
+                                        onClick = {
+                                            onRepeatToggle("None")
+                                            showRepeatMenu = false
+                                        }
+                                    )
+                                    HorizontalDivider()
+                                    listOf("Daily", "Weekly", "Monthly", "Yearly").forEach { modeOption ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = "Repeat $modeOption",
+                                                    fontWeight = if (task.repeatMode == modeOption) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Filled.Repeat,
+                                                    null,
+                                                    tint = if (task.repeatMode == modeOption) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            },
+                                            onClick = {
+                                                onRepeatToggle(modeOption)
+                                                showRepeatMenu = false
+                                            }
+                                        )
+                                    }
+                                }
                             }
 
                             if (task.hasAlarm) {

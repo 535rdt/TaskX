@@ -555,6 +555,34 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
         }
     }
 
+    fun toggleTaskRepeat(task: TaskEntity, mode: String? = null) {
+        viewModelScope.launch {
+            val isCurrentlyRepeating = !task.repeatMode.isNullOrBlank() && task.repeatMode != "None"
+            val newMode = if (mode != null) {
+                if (mode == "None" || mode == "Off") null else mode
+            } else {
+                if (isCurrentlyRepeating) null else "Daily"
+            }
+            val newUnit = when (newMode) {
+                "Weekly" -> "Weeks"
+                "Monthly" -> "Months"
+                "Yearly" -> "Years"
+                else -> "Days"
+            }
+            val updated = task.copy(
+                repeatMode = newMode,
+                repeatInterval = if (newMode != null && task.repeatInterval <= 0) 1 else task.repeatInterval,
+                repeatUnit = if (newMode != null) newUnit else task.repeatUnit
+            )
+            repository.updateTask(updated)
+            com.example.moderntodo.data.remote.SharedBookRealtimeCoordinator.notifyLocalMutation(
+                com.example.moderntodo.ModernToDoApp.instance,
+                repository,
+                task.projectId ?: task.bookId
+            )
+        }
+    }
+
     fun toggleTaskCompletion(context: android.content.Context, task: TaskEntity) {
         viewModelScope.launch {
             val isNowCompleted = !task.isCompleted
