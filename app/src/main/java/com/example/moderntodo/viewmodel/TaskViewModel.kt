@@ -664,6 +664,7 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                     ownerEmail = userEmail
                 )
             }
+            switchBook(bookId)
         }
     }
 

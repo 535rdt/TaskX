@@ -80,7 +80,10 @@ fun HomeScreen(
     var isAddingProjectTask by remember { mutableStateOf(false) }
     var targetProjectIdForAdd by remember { mutableStateOf<Int?>(null) }
     var showFilterSheet by remember { mutableStateOf(false) }
+    var showCreateListDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
+    var showDeleteListConfirm by remember { mutableStateOf(false) }
+    var newListNameInput by remember { mutableStateOf("") }
     var isCreatingList by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf("") }
     var showOmniSearch by remember { mutableStateOf(false) }
@@ -401,6 +404,42 @@ fun HomeScreen(
                                         ) {
                                             if (currentBottomTab == "Tasks") {
                                                 DropdownMenuItem(
+                                                    text = { Text("New List") },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Filled.PlaylistAdd, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                                    },
+                                                    onClick = {
+                                                        showTopBarOverflowMenu = false
+                                                        newListNameInput = ""
+                                                        showCreateListDialog = true
+                                                    }
+                                                )
+                                                if (currentBook != null) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("Rename List") },
+                                                        leadingIcon = {
+                                                            Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                        },
+                                                        onClick = {
+                                                            showTopBarOverflowMenu = false
+                                                            showRenameDialog = true
+                                                        }
+                                                    )
+                                                    if (normalTaskBooks.size > 1) {
+                                                        DropdownMenuItem(
+                                                            text = { Text("Delete List", color = Color(0xFFEF4444)) },
+                                                            leadingIcon = {
+                                                                Icon(Icons.Filled.Delete, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                                                            },
+                                                            onClick = {
+                                                                showTopBarOverflowMenu = false
+                                                                showDeleteListConfirm = true
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                                HorizontalDivider()
+                                                DropdownMenuItem(
                                                     text = { Text("Filter & Sort") },
                                                     leadingIcon = {
                                                         Icon(Icons.Filled.FilterList, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -613,8 +652,8 @@ fun HomeScreen(
                                             item {
                                                 AssistChip(
                                                     onClick = {
-                                                        newListName = ""
-                                                        showRenameDialog = true
+                                                        newListNameInput = ""
+                                                        showCreateListDialog = true
                                                     },
                                                     leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp)) },
                                                     label = { Text("New List") },
@@ -1005,9 +1044,82 @@ fun HomeScreen(
                     }
                 }
 
+    // Create New List Dialog
+    if (showCreateListDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showCreateListDialog = false
+                newListNameInput = ""
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.PlaylistAdd,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Create New List",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Enter a name for your new task list:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = newListNameInput,
+                        onValueChange = { newListNameInput = it },
+                        label = { Text("List Name") },
+                        placeholder = { Text("e.g. Shopping, Work, Personal") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = newListNameInput.trim()
+                        if (trimmed.isNotBlank()) {
+                            viewModel.addBook(
+                                name = trimmed,
+                                context = context,
+                                userEmail = currentUserEmail
+                            )
+                            Toast.makeText(context, "Created list '$trimmed'", Toast.LENGTH_SHORT).show()
+                            newListNameInput = ""
+                            showCreateListDialog = false
+                        }
+                    },
+                    enabled = newListNameInput.isNotBlank(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Create List")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showCreateListDialog = false
+                    newListNameInput = ""
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     // Rename List Dialog
     if (showRenameDialog && currentBook != null) {
-        var editedName by remember { mutableStateOf(currentBook.name) }
+        var editedName by remember(currentBook.name) { mutableStateOf(currentBook.name) }
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
             title = { Text("Rename List") },
@@ -1016,19 +1128,60 @@ fun HomeScreen(
                     value = editedName,
                     onValueChange = { editedName = it },
                     label = { Text("List Name") },
-                    modifier = Modifier.fillMaxWidth()
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    if (editedName.isNotBlank()) {
-                        viewModel.updateBook(currentBook, editedName)
-                    }
-                    showRenameDialog = false
-                }) { Text("Rename") }
+                Button(
+                    onClick = {
+                        val trimmed = editedName.trim()
+                        if (trimmed.isNotBlank()) {
+                            viewModel.updateBook(currentBook, trimmed)
+                            Toast.makeText(context, "Renamed to '$trimmed'", Toast.LENGTH_SHORT).show()
+                        }
+                        showRenameDialog = false
+                    },
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Save")
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showRenameDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showRenameDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Delete List Confirmation Dialog
+    if (showDeleteListConfirm && currentBook != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteListConfirm = false },
+            title = { Text("Delete List?") },
+            text = {
+                Text("Are you sure you want to permanently delete '${currentBook.name}' and all its tasks? This action cannot be undone.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val deletedName = currentBook.name
+                        viewModel.deleteBook(currentBook)
+                        showDeleteListConfirm = false
+                        Toast.makeText(context, "Deleted list '$deletedName'", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Delete", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteListConfirm = false }) {
+                    Text("Cancel")
+                }
             }
         )
     }
