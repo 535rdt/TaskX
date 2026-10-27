@@ -294,7 +294,7 @@ fun HomeScreen(
                                         titleContentColor = MaterialTheme.colorScheme.onBackground
                                     ),
                                 title = {
-                                    Column {
+                                    Column(modifier = Modifier.padding(start = 2.dp)) {
                                         Text(
                                             text = when (currentBottomTab) {
                                                 "Project Tasks" -> "Project Tasks"
@@ -303,14 +303,18 @@ fun HomeScreen(
                                                 else -> currentBook?.name ?: "Tasks"
                                             },
                                             fontWeight = FontWeight.Bold,
-                                            style = MaterialTheme.typography.titleLarge
+                                            style = MaterialTheme.typography.titleLarge,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                         if (currentBottomTab == "Tasks") {
                                             val completedCount = allTasks.count { it.bookId == currentBookId && it.isCompleted }
                                             Text(
                                                 text = "${pendingTasks.size} pending • $completedCount completed",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                             )
                                         }
                                     }
@@ -319,9 +323,9 @@ fun HomeScreen(
                                     IconButton(
                                         onClick = { scope.launch { drawerState.open() } },
                                         modifier = Modifier
-                                            .padding(start = 12.dp)
-                                            .size(40.dp)
-                                            .clip(RoundedCornerShape(12.dp))
+                                            .padding(start = 8.dp)
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(10.dp))
                                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
                                     ) {
                                         Icon(
@@ -333,70 +337,33 @@ fun HomeScreen(
                                     }
                                 },
                                 actions = {
+                                    var showTopBarOverflowMenu by remember { mutableStateOf(false) }
+
                                     // Universal Spotlight Search
                                     IconButton(
                                         onClick = { showOmniSearch = true },
                                         modifier = Modifier
-                                            .size(38.dp)
+                                            .size(36.dp)
                                             .clip(CircleShape)
                                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                                     ) {
-                                        Icon(Icons.Filled.Search, contentDescription = "Spotlight Search", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
-                                    }
-
-                                    Spacer(Modifier.width(6.dp))
-
-                                    // Focus / Pomodoro Mode
-                                    IconButton(
-                                        onClick = { onNavigateToFocus(null) },
-                                        modifier = Modifier
-                                            .size(38.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f))
-                                    ) {
-                                        Icon(Icons.Outlined.Timer, contentDescription = "Focus Mode", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                                    }
-
-                                    Spacer(Modifier.width(6.dp))
-
-                                    // Quick Completed Tasks & Filter Buttons (on normal Tasks tab)
-                                    if (currentBottomTab == "Tasks") {
-                                        IconButton(
-                                            onClick = onNavigateToCompleted,
-                                            modifier = Modifier
-                                                .size(38.dp)
-                                                .clip(CircleShape)
-                                                .background(Color(0xFF10B981).copy(alpha = 0.15f))
-                                        ) {
-                                            Icon(
-                                                Icons.Filled.CheckCircle,
-                                                contentDescription = "Completed Tasks",
-                                                tint = Color(0xFF10B981),
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                        Spacer(Modifier.width(6.dp))
-
-                                        IconButton(
-                                            onClick = { showFilterSheet = true },
-                                            modifier = Modifier
-                                                .size(38.dp)
-                                                .clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                                        ) {
-                                            Icon(Icons.Filled.FilterList, contentDescription = "Filter", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
-                                        }
-                                        Spacer(Modifier.width(6.dp))
+                                        Icon(
+                                            Icons.Filled.Search,
+                                            contentDescription = "Spotlight Search",
+                                            tint = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                     }
 
                                     // Multi-select toggle button (on Tasks tab when tasks exist)
                                     if (currentBottomTab == "Tasks" && pendingTasks.isNotEmpty()) {
+                                        Spacer(Modifier.width(4.dp))
                                         IconButton(
                                             onClick = {
                                                 selectedTaskIds.addAll(pendingTasks.take(1).mapNotNull { it.id })
                                             },
                                             modifier = Modifier
-                                                .size(38.dp)
+                                                .size(36.dp)
                                                 .clip(CircleShape)
                                                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                                         ) {
@@ -407,8 +374,67 @@ fun HomeScreen(
                                                 modifier = Modifier.size(18.dp)
                                             )
                                         }
-                                        Spacer(Modifier.width(6.dp))
                                     }
+
+                                    Spacer(Modifier.width(4.dp))
+
+                                    // Overflow Menu (Filter & Sort, Focus Mode, Completed Tasks)
+                                    Box {
+                                        IconButton(
+                                            onClick = { showTopBarOverflowMenu = true },
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.MoreVert,
+                                                contentDescription = "More Options",
+                                                tint = MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+
+                                        DropdownMenu(
+                                            expanded = showTopBarOverflowMenu,
+                                            onDismissRequest = { showTopBarOverflowMenu = false }
+                                        ) {
+                                            if (currentBottomTab == "Tasks") {
+                                                DropdownMenuItem(
+                                                    text = { Text("Filter & Sort") },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Filled.FilterList, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                    },
+                                                    onClick = {
+                                                        showTopBarOverflowMenu = false
+                                                        showFilterSheet = true
+                                                    }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Completed Tasks") },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(18.dp))
+                                                    },
+                                                    onClick = {
+                                                        showTopBarOverflowMenu = false
+                                                        onNavigateToCompleted()
+                                                    }
+                                                )
+                                            }
+                                            DropdownMenuItem(
+                                                text = { Text("Focus / Pomodoro") },
+                                                leadingIcon = {
+                                                    Icon(Icons.Outlined.Timer, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                                },
+                                                onClick = {
+                                                    showTopBarOverflowMenu = false
+                                                    onNavigateToFocus(null)
+                                                }
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(Modifier.width(6.dp))
 
                                     // Profile Button (opens endDrawerState)
                                     val currentUserName by SettingsRepository.userNameFlow.collectAsState()
@@ -419,7 +445,7 @@ fun HomeScreen(
                                     Box(
                                         modifier = Modifier
                                             .padding(end = 12.dp)
-                                            .size(38.dp)
+                                            .size(36.dp)
                                             .clip(CircleShape)
                                             .background(MaterialTheme.colorScheme.primaryContainer)
                                             .clickable { scope.launch { drawerState.open() } },
