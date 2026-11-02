@@ -111,8 +111,9 @@ fun AddTaskSheet(
         mutableStateOf(existingTask?.projectId ?: projectIdDefault ?: projectTaskBooks.firstOrNull()?.id)
     }
     var selectedNormalBookId by remember {
-        mutableStateOf(existingTask?.bookId ?: normalTaskBooks.firstOrNull()?.id ?: 1)
+        mutableStateOf(existingTask?.bookId ?: if (projectIdDefault != null && normalTaskBooks.any { it.id == projectIdDefault }) projectIdDefault else normalTaskBooks.firstOrNull()?.id ?: 1)
     }
+    var isSaving by remember { mutableStateOf(false) }
 
     // 3. Priority & Flagging
     var priority by remember {
@@ -1738,7 +1739,8 @@ fun AddTaskSheet(
 
                     Button(
                         onClick = {
-                            if (title.isNotBlank()) {
+                            if (!isSaving && title.isNotBlank()) {
+                                isSaving = true
                                 val rMode = if (isRepeating) {
                                     if (repeatDaysOfWeek != null && repeatDaysOfWeek!!.isNotBlank()) "Weekdays"
                                     else when (repeatUnit) {
@@ -1782,20 +1784,34 @@ fun AddTaskSheet(
                         modifier = Modifier
                             .weight(1.2f)
                             .height(52.dp),
-                        enabled = title.isNotBlank(),
+                        enabled = !isSaving && title.isNotBlank(),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(
-                            imageVector = if (existingTask == null) Icons.Filled.Add else Icons.Filled.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (existingTask == null) "Create Task" else "Update Task",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
-                        )
+                        if (isSaving) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (existingTask == null) "Creating..." else "Updating...",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = if (existingTask == null) Icons.Filled.Add else Icons.Filled.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (existingTask == null) "Create Task" else "Update Task",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                        }
                     }
                 }
             }

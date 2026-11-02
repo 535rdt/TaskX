@@ -249,7 +249,9 @@ object SharedBookService {
 
         val inviteCode = getSavedInviteCode(context, bookId, ownerEmail) ?: run {
             val code = generateInviteCode(book.name, bookId)
-            saveInviteCode(context, bookId, code, ownerEmail)
+            if (bookId != 1 || !ownerEmail.isNullOrBlank()) {
+                saveInviteCode(context, bookId, code, ownerEmail)
+            }
             code
         }
 
@@ -425,12 +427,18 @@ object SharedBookService {
 
         // 2. Reconcile tasks: update existing or insert new
         val existingTasks = repository.getTasksForBookList(bookId)
-        val localBySyncId = existingTasks.filter { !it.syncId.isNullOrBlank() }.associateBy { it.syncId!! }.toMutableMap()
-        val localByTitle = existingTasks.associateBy { it.title.trim().lowercase(Locale.ROOT) }.toMutableMap()
+        val remainingTasks = existingTasks.toMutableList()
+        val localBySyncId = remainingTasks.filter { !it.syncId.isNullOrBlank() }.associateBy { it.syncId!! }.toMutableMap()
 
         for (item in payload.tasks) {
             val syncId = item.syncId.ifBlank { "task_${item.title.hashCode()}_${item.dueDate ?: 0}" }
-            val matchedTask = localBySyncId[syncId] ?: localByTitle[item.title.trim().lowercase(Locale.ROOT)]
+            val matchedTask = localBySyncId[syncId] ?: remainingTasks.find {
+                it.title.trim().equals(item.title.trim(), ignoreCase = true)
+            }
+            if (matchedTask != null) {
+                remainingTasks.remove(matchedTask)
+                if (matchedTask.syncId != null) localBySyncId.remove(matchedTask.syncId)
+            }
 
             if (matchedTask != null) {
                 // Task exists locally - reconcile properties

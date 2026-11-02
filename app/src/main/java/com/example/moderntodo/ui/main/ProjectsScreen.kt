@@ -1351,6 +1351,7 @@ fun QuickAddTaskDialog(
 ) {
     val context = LocalContext.current
     var taskTitle by remember { mutableStateOf("") }
+    var isSubmitting by remember { mutableStateOf(false) }
     var selectedPriority by remember { mutableStateOf(4) }
     var dueDate by remember { mutableStateOf<Long?>(null) }
 
@@ -1441,12 +1442,16 @@ fun QuickAddTaskDialog(
             }
         },
         confirmButton = {
-            Button(onClick = {
-                if (taskTitle.isNotBlank()) {
-                    onAddTask(taskTitle, selectedPriority, dueDate)
-                }
-            }) {
-                Text("Add Task")
+            Button(
+                onClick = {
+                    if (!isSubmitting && taskTitle.isNotBlank()) {
+                        isSubmitting = true
+                        onAddTask(taskTitle, selectedPriority, dueDate)
+                    }
+                },
+                enabled = !isSubmitting && taskTitle.isNotBlank()
+            ) {
+                Text(if (isSubmitting) "Adding..." else "Add Task")
             }
         },
         dismissButton = {

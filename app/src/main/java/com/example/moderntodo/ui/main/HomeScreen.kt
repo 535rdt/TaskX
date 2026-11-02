@@ -92,6 +92,7 @@ fun HomeScreen(
     val selectedTaskIds = remember { mutableStateListOf<Int>() }
     val isSelectionMode = selectedTaskIds.isNotEmpty()
     var showDeleteMultipleConfirm by remember { mutableStateOf(false) }
+    var isSavingTask by remember { mutableStateOf(false) }
 
     BackHandler(enabled = isSelectionMode) {
         selectedTaskIds.clear()
@@ -1195,31 +1196,44 @@ fun HomeScreen(
     if (showAddTask) {
         val ctx = context
         val isProj = isAddingProjectTask || (taskToEdit?.isProjectTask == true)
-        val projId = targetProjectIdForAdd ?: taskToEdit?.projectId ?: (if (isProj) taskToEdit?.bookId else null)
+        val projId = targetProjectIdForAdd ?: taskToEdit?.projectId ?: (if (isProj) taskToEdit?.bookId else currentBookId)
+        val safeExistingTask = if (taskToEdit?.id != null) taskToEdit else null
         AddTaskSheet(
-            existingTask = taskToEdit,
+            existingTask = safeExistingTask,
             isProjectTaskDefault = isProj,
             projectIdDefault = projId,
             normalTaskBooks = normalTaskBooks,
             projectTaskBooks = projectTaskBooks,
-            onDismiss = { showAddTask = false },
-            onSave = { title, desc, date, time, alarm, ringtoneUri, repeatMode, rInterval, rUnit, rStarts, rEndsType, rEndsValue, rDaysOfWeek, rMonths, rYears, isFav, isImp, subs, tags, priority, isProjectTask, savedProjectId, status, comments, attachments, assignee ->
-                viewModel.saveTask(
-                    ctx, title, desc, date, time, alarm, ringtoneUri, repeatMode,
-                    rInterval, rUnit, rStarts, rEndsType, rEndsValue, rDaysOfWeek, rMonths, rYears,
-                    isFav, isImp, subs, tags, priority,
-                    isProjectTask = isProjectTask,
-                    projectId = savedProjectId,
-                    status = status,
-                    comments = comments,
-                    attachments = attachments,
-                    assignee = assignee,
-                    existingTask = taskToEdit
-                )
+            onDismiss = {
+                taskToEdit = null
                 showAddTask = false
+            },
+            onSave = { title, desc, date, time, alarm, ringtoneUri, repeatMode, rInterval, rUnit, rStarts, rEndsType, rEndsValue, rDaysOfWeek, rMonths, rYears, isFav, isImp, subs, tags, priority, isProjectTask, savedProjectId, status, comments, attachments, assignee ->
+                if (!isSavingTask) {
+                    isSavingTask = true
+                    viewModel.saveTask(
+                        ctx, title, desc, date, time, alarm, ringtoneUri, repeatMode,
+                        rInterval, rUnit, rStarts, rEndsType, rEndsValue, rDaysOfWeek, rMonths, rYears,
+                        isFav, isImp, subs, tags, priority,
+                        isProjectTask = isProjectTask,
+                        projectId = savedProjectId,
+                        status = status,
+                        comments = comments,
+                        attachments = attachments,
+                        assignee = assignee,
+                        existingTask = safeExistingTask
+                    )
+                    taskToEdit = null
+                    showAddTask = false
+                    scope.launch {
+                        kotlinx.coroutines.delay(600)
+                        isSavingTask = false
+                    }
+                }
             },
             onDelete = {
                 taskToEdit?.let { viewModel.deleteTask(it, context) }
+                taskToEdit = null
                 showAddTask = false
             }
         )

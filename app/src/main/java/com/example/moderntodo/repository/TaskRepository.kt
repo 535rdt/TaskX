@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 import com.example.moderntodo.data.local.ProjectNoteDao
 import com.example.moderntodo.data.local.ProjectNoteEntity
@@ -88,6 +89,11 @@ class TaskRepository(
             }
         } catch (e: Exception) {
             Log.e("TaskRepository", "ensureInitialized error", e)
+        }
+        try {
+            removeDuplicateTasks()
+        } catch (e: Exception) {
+            Log.e("TaskRepository", "removeDuplicateTasks error", e)
         }
         syncWithRemote()
     }
@@ -239,6 +245,33 @@ class TaskRepository(
         }
     }
 
+
+    suspend fun removeDuplicateTasks() {
+        withContext(Dispatchers.IO) {
+            try {
+                val allTasks = taskDao.getAllTasksList()
+                val groups = allTasks.groupBy {
+                    "${it.bookId}_${it.title.trim().lowercase(java.util.Locale.ROOT)}_${it.dueDate}_${it.dueTime}"
+                }
+                for ((_, list) in groups) {
+                    if (list.size > 1) {
+                        val sorted = list.sortedWith(
+                            compareByDescending<TaskEntity> { it.isCompleted }
+                                .thenByDescending { it.id ?: 0 }
+                        )
+                        val toKeep = sorted.first()
+                        val toDelete = sorted.drop(1)
+                        for (dup in toDelete) {
+                            taskDao.deleteTask(dup)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("TaskRepository", "removeDuplicateTasks error", e)
+            }
+        }
+    }
+
     suspend fun syncWithRemote() {
         syncScope.launch {
             try {
@@ -253,7 +286,24 @@ class TaskRepository(
             try {
                 val remoteTasks = SupabaseClient.api.getAllTasks()
                 if (remoteTasks.isNotEmpty()) {
-                    taskDao.insertTasks(remoteTasks)
+                    val localTasks = taskDao.getAllTasksList()
+                    val localSyncIds = localTasks.mapNotNull { it.syncId }.toSet()
+                    val localSignatures = localTasks.map {
+                        "${it.bookId}_${it.title.trim().lowercase(java.util.Locale.ROOT)}_${it.dueDate}"
+                    }.toSet()
+
+                    val newTasksToInsert = mutableListOf<TaskEntity>()
+                    for (remote in remoteTasks) {
+                        val hasSyncId = !remote.syncId.isNullOrBlank() && localSyncIds.contains(remote.syncId)
+                        val signature = "${remote.bookId}_${remote.title.trim().lowercase(java.util.Locale.ROOT)}_${remote.dueDate}"
+                        val hasSignature = localSignatures.contains(signature)
+                        if (!hasSyncId && !hasSignature) {
+                            newTasksToInsert.add(remote.copy(id = null))
+                        }
+                    }
+                    if (newTasksToInsert.isNotEmpty()) {
+                        taskDao.insertTasks(newTasksToInsert)
+                    }
                 }
             } catch (e: Exception) {
                 Log.d("TaskRepository", "Sync tasks skipped/failed: ${e.message}")

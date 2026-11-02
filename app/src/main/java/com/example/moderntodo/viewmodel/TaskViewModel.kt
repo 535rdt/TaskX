@@ -19,6 +19,8 @@ enum class SortOrder {
 }
 
 class TaskViewModel(val repository: TaskRepository) : ViewModel() {
+    private var lastSavedSignature: String? = null
+    private var lastSavedTimestamp: Long = 0L
 
     fun exportTasks(context: android.content.Context, uri: android.net.Uri) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -439,6 +441,16 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
         assignee: String = "",
         existingTask: TaskEntity? = null
     ) {
+        val targetBookId = if (isProjectTask && projectId != null) projectId else (existingTask?.bookId ?: _currentBookId.value)
+        val signature = "${title.trim()}_${date}_${time}_${isProjectTask}_$targetBookId"
+        val now = System.currentTimeMillis()
+        if (existingTask == null && signature == lastSavedSignature && (now - lastSavedTimestamp) < 1500L) {
+            android.util.Log.d("TaskViewModel", "Ignored rapid duplicate saveTask call for '$title'")
+            return
+        }
+        lastSavedSignature = signature
+        lastSavedTimestamp = now
+
         viewModelScope.launch {
             val targetBookId = if (isProjectTask && projectId != null) projectId else (existingTask?.bookId ?: _currentBookId.value)
             val syncId = existingTask?.syncId ?: ("task_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().replace("-", "").take(8))
@@ -758,6 +770,15 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
         tags: String = "",
         isProjectTask: Boolean = true
     ) {
+        val signature = "quick_${bookId}_${title.trim()}_${dueDate}"
+        val now = System.currentTimeMillis()
+        if (signature == lastSavedSignature && (now - lastSavedTimestamp) < 1500L) {
+            android.util.Log.d("TaskViewModel", "Ignored duplicate addTaskToBook for '$title'")
+            return
+        }
+        lastSavedSignature = signature
+        lastSavedTimestamp = now
+
         viewModelScope.launch {
             val syncId = "task_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().replace("-", "").take(8)
             val task = TaskEntity(

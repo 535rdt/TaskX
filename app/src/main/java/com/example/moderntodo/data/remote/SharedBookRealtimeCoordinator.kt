@@ -62,6 +62,7 @@ object SharedBookRealtimeCoordinator {
 
                         for (book in sortedBooks) {
                             val bId = book.id ?: continue
+                            if (bId == 1 && !book.isProject) continue // Never auto-poll personal default list
                             val code = SharedBookService.getSavedInviteCode(context, bId, userEmail)
                             if (!code.isNullOrBlank()) {
                                 SharedBookService.syncSharedBookCatchUp(
