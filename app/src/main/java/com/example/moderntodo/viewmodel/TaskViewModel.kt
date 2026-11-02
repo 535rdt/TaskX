@@ -576,6 +576,7 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                 if (isCurrentlyRepeating) null else "Daily"
             }
             val newUnit = when (newMode) {
+                "Hourly" -> "Hours"
                 "Weekly" -> "Weeks"
                 "Monthly" -> "Months"
                 "Yearly" -> "Years"
@@ -652,6 +653,7 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
         val cal = Calendar.getInstance()
         cal.timeInMillis = timeMillis
         when (unit) {
+            "Hours" -> cal.add(Calendar.HOUR_OF_DAY, interval)
             "Days" -> cal.add(Calendar.DAY_OF_YEAR, interval)
             "Weeks" -> cal.add(Calendar.WEEK_OF_YEAR, interval)
             "Months" -> cal.add(Calendar.MONTH, interval)

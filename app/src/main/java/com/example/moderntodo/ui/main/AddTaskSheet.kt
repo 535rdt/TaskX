@@ -17,6 +17,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -1207,9 +1208,20 @@ fun AddTaskSheet(
                                     )
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Row(
-                                        modifier = Modifier.fillMaxWidth(),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState()),
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
+                                        FilterChip(
+                                            selected = repeatInterval == 1 && repeatUnit == "Hours" && repeatDaysOfWeek == null,
+                                            onClick = {
+                                                repeatInterval = 1
+                                                repeatUnit = "Hours"
+                                                repeatDaysOfWeek = null
+                                            },
+                                            label = { Text("Hourly", style = MaterialTheme.typography.labelSmall) }
+                                        )
                                         FilterChip(
                                             selected = repeatInterval == 1 && repeatUnit == "Days" && repeatDaysOfWeek == null,
                                             onClick = {
@@ -1218,6 +1230,15 @@ fun AddTaskSheet(
                                                 repeatDaysOfWeek = null
                                             },
                                             label = { Text("Daily", style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                        FilterChip(
+                                            selected = repeatDaysOfWeek == "Mon,Tue,Wed,Thu,Fri",
+                                            onClick = {
+                                                repeatInterval = 1
+                                                repeatUnit = "Weeks"
+                                                repeatDaysOfWeek = "Mon,Tue,Wed,Thu,Fri"
+                                            },
+                                            label = { Text("Weekdays", style = MaterialTheme.typography.labelSmall) }
                                         )
                                         FilterChip(
                                             selected = repeatInterval == 1 && repeatUnit == "Weeks" && repeatDaysOfWeek == null,
@@ -1238,13 +1259,13 @@ fun AddTaskSheet(
                                             label = { Text("Monthly", style = MaterialTheme.typography.labelSmall) }
                                         )
                                         FilterChip(
-                                            selected = repeatDaysOfWeek == "Mon,Tue,Wed,Thu,Fri",
+                                            selected = repeatInterval == 1 && repeatUnit == "Years",
                                             onClick = {
                                                 repeatInterval = 1
-                                                repeatUnit = "Weeks"
-                                                repeatDaysOfWeek = "Mon,Tue,Wed,Thu,Fri"
+                                                repeatUnit = "Years"
+                                                repeatDaysOfWeek = null
                                             },
-                                            label = { Text("Weekdays", style = MaterialTheme.typography.labelSmall) }
+                                            label = { Text("Yearly", style = MaterialTheme.typography.labelSmall) }
                                         )
                                     }
 
@@ -1744,6 +1765,7 @@ fun AddTaskSheet(
                                 val rMode = if (isRepeating) {
                                     if (repeatDaysOfWeek != null && repeatDaysOfWeek!!.isNotBlank()) "Weekdays"
                                     else when (repeatUnit) {
+                                        "Hours" -> if (repeatInterval == 1) "Hourly" else "Every $repeatInterval Hours"
                                         "Weeks" -> if (repeatInterval == 1) "Weekly" else "Every $repeatInterval Weeks"
                                         "Months" -> if (repeatInterval == 1) "Monthly" else "Every $repeatInterval Months"
                                         "Years" -> if (repeatInterval == 1) "Yearly" else "Every $repeatInterval Years"
@@ -1980,13 +2002,18 @@ fun RepeatConfigScreen(
                 Text("Repeat Frequency", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Row(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     OutlinedTextField(
                         value = cInterval,
                         onValueChange = { if (it.all { char -> char.isDigit() }) cInterval = it },
                         label = { Text("Every") },
                         modifier = Modifier.width(90.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(12.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     var expanded by remember { mutableStateOf(false) }
@@ -1996,21 +2023,120 @@ fun RepeatConfigScreen(
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("Frequency Unit") },
-                            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) },
+                            trailingIcon = {
+                                IconButton(onClick = { expanded = !expanded }) {
+                                    Icon(
+                                        imageVector = if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                                        contentDescription = "Select Unit"
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        // Transparent click interceptor to guarantee tap opens dropdown menu
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .matchParentSize()
                                 .clickable { expanded = true }
                         )
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            listOf("Days", "Weeks", "Months", "Years").forEach { u ->
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            listOf("Hours", "Days", "Weeks", "Months", "Years").forEach { u ->
                                 DropdownMenuItem(
-                                    text = { Text(u) },
+                                    text = {
+                                        Text(
+                                            text = u,
+                                            fontWeight = if (cUnit == u) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (cUnit == u) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = when (u) {
+                                                "Hours" -> Icons.Outlined.Schedule
+                                                "Days" -> Icons.Outlined.Today
+                                                "Weeks" -> Icons.Outlined.DateRange
+                                                "Months" -> Icons.Outlined.CalendarMonth
+                                                else -> Icons.Outlined.Event
+                                            },
+                                            contentDescription = null,
+                                            tint = if (cUnit == u) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                        )
+                                    },
+                                    trailingIcon = if (cUnit == u) {
+                                        { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)) }
+                                    } else null,
                                     onClick = {
                                         cUnit = u
                                         expanded = false
                                     }
                                 )
                             }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Interactive Quick-Tap Frequency Unit Chips
+                Text(
+                    text = "Select Unit:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("Hours", "Days", "Weeks", "Months", "Years").forEach { u ->
+                        FilterChip(
+                            selected = cUnit == u,
+                            onClick = { cUnit = u },
+                            label = { Text(u, fontWeight = if (cUnit == u) FontWeight.Bold else FontWeight.Normal) },
+                            leadingIcon = if (cUnit == u) {
+                                { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                            } else null,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+
+                // If Weeks is selected, display Day of the Week multi-select selector
+                if (cUnit == "Weeks") {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = "Repeat On Days:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    val selectedDays = if (cDaysOfWeek.isBlank()) mutableSetOf<String>() else cDaysOfWeek.split(",").map { it.trim() }.filter { it.isNotBlank() }.toMutableSet()
+                    val daysList = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        daysList.forEach { day ->
+                            val isSelected = selectedDays.contains(day)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    val updatedDays = selectedDays.toMutableSet()
+                                    if (isSelected) updatedDays.remove(day) else updatedDays.add(day)
+                                    cDaysOfWeek = daysList.filter { updatedDays.contains(it) }.joinToString(",")
+                                },
+                                label = { Text(day, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                shape = RoundedCornerShape(8.dp)
+                            )
                         }
                     }
                 }

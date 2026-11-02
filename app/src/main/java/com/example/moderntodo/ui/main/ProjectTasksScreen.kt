@@ -1063,7 +1063,7 @@ fun ProjectTaskRow(
                                         }
                                     )
                                     HorizontalDivider()
-                                    listOf("Daily", "Weekly", "Monthly", "Yearly").forEach { modeOption ->
+                                    listOf("Hourly", "Daily", "Weekly", "Monthly", "Yearly").forEach { modeOption ->
                                         DropdownMenuItem(
                                             text = {
                                                 Text(
