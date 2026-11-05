@@ -1,6 +1,9 @@
 package com.example.moderntodo.ui.main
 
 import android.widget.Toast
+import android.media.RingtoneManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -35,6 +38,25 @@ fun SettingsScreen(onBack: () -> Unit) {
     val themeMode by SettingsRepository.themeFlow.collectAsState(initial = "System")
     val notificationsEnabled by SettingsRepository.notificationsEnabledFlow.collectAsState(initial = true)
     val defaultTime by SettingsRepository.defaultReminderTimeFlow.collectAsState(initial = 32400000L) // 9:00 AM
+    val defaultRingtoneUri by SettingsRepository.defaultRingtoneUriFlow.collectAsState(initial = null)
+    val defaultAlarmEnabled by SettingsRepository.defaultAlarmEnabledFlow.collectAsState(initial = true)
+
+    val ringtonePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val uri: Uri? = result.data?.let { data ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+                }
+            }
+            SettingsRepository.setDefaultRingtoneUri(uri?.toString())
+            Toast.makeText(context, "Default notification sound updated", Toast.LENGTH_SHORT).show()
+        }
+    }
     val currentEmail by SettingsRepository.userEmailFlow.collectAsState()
     val currentName by SettingsRepository.userNameFlow.collectAsState()
     val displayEmail = currentEmail ?: "Logged In"
@@ -125,16 +147,69 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 4.dp))
 
-            // Productivity Section
-            SettingsCategory(title = "Productivity")
+            // Notifications & Alarms Section
+            SettingsCategory(title = "Notifications & Alarms")
+
             SettingsItem(
-                icon = Icons.Outlined.TrendingUp,
-                title = "Productivity",
-                onClick = { Toast.makeText(context, "View Productivity Trends", Toast.LENGTH_SHORT).show() }
+                icon = Icons.Outlined.MusicNote,
+                title = "Default Notification Sound",
+                subtitle = SettingsRepository.getRingtoneTitle(context, defaultRingtoneUri),
+                onClick = {
+                    val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION or RingtoneManager.TYPE_ALARM)
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
+                        if (!defaultRingtoneUri.isNullOrBlank()) {
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(defaultRingtoneUri))
+                        }
+                    }
+                    ringtonePickerLauncher.launch(intent)
+                }
             )
+
             SettingsItem(
                 icon = Icons.Outlined.Alarm,
-                title = "Reminders",
+                title = "Default Alarm for Tasks",
+                subtitle = if (defaultAlarmEnabled) "Alarms enabled by default on new tasks" else "Alarms disabled by default on new tasks",
+                trailing = {
+                    Switch(
+                        checked = defaultAlarmEnabled,
+                        onCheckedChange = { newState ->
+                            SettingsRepository.setDefaultAlarmEnabled(newState)
+                            Toast.makeText(context, if (newState) "Default alarm turned on" else "Default alarm turned off", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                },
+                onClick = {
+                    val newState = !defaultAlarmEnabled
+                    SettingsRepository.setDefaultAlarmEnabled(newState)
+                    Toast.makeText(context, if (newState) "Default alarm turned on" else "Default alarm turned off", Toast.LENGTH_SHORT).show()
+                }
+            )
+
+            SettingsItem(
+                icon = Icons.Outlined.Notifications,
+                title = "App Notifications",
+                subtitle = if (notificationsEnabled) "Active in TaskX" else "Disabled in TaskX",
+                trailing = {
+                    Switch(
+                        checked = notificationsEnabled,
+                        onCheckedChange = { newState ->
+                            SettingsRepository.setNotificationsEnabled(newState)
+                            Toast.makeText(context, if (newState) "Notifications turned on" else "Notifications turned off", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                },
+                onClick = {
+                    val newState = !notificationsEnabled
+                    SettingsRepository.setNotificationsEnabled(newState)
+                    Toast.makeText(context, if (newState) "Notifications turned on" else "Notifications turned off", Toast.LENGTH_SHORT).show()
+                }
+            )
+
+            SettingsItem(
+                icon = Icons.Outlined.Schedule,
+                title = "Default Reminder Time",
                 subtitle = run {
                     val cal = Calendar.getInstance().apply {
                         timeInMillis = 0
@@ -162,22 +237,12 @@ fun SettingsScreen(onBack: () -> Unit) {
                     ).show()
                 }
             )
+
             val sysNotificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
             val canScheduleExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 alarmManager?.canScheduleExactAlarms() ?: true
             } else true
-
-            SettingsItem(
-                icon = Icons.Outlined.Notifications,
-                title = "App Notifications",
-                subtitle = if (notificationsEnabled) "Active in TaskX" else "Disabled in TaskX",
-                onClick = {
-                    val newState = !notificationsEnabled
-                    SettingsRepository.setNotificationsEnabled(newState)
-                    Toast.makeText(context, if (newState) "Notifications turned on" else "Notifications turned off", Toast.LENGTH_SHORT).show()
-                }
-            )
 
             SettingsItem(
                 icon = if (sysNotificationsEnabled) Icons.Outlined.CheckCircle else Icons.Outlined.Warning,
@@ -216,17 +281,17 @@ fun SettingsScreen(onBack: () -> Unit) {
             SettingsItem(
                 icon = Icons.Outlined.NotificationsActive,
                 title = "Test Notification & Alert Sound",
-                subtitle = "Tap to verify banner, sound & vibration",
+                subtitle = "Play default sound (${SettingsRepository.getRingtoneTitle(context, defaultRingtoneUri)})",
                 onClick = {
                     AlarmReceiver.showNotification(
                         context = context,
                         taskId = 88888,
                         title = "TaskX Reminder Test",
                         desc = "Your task notification & sound alert is working perfectly!",
-                        ringtoneUriStr = null,
+                        ringtoneUriStr = defaultRingtoneUri,
                         hasAlarm = false
                     )
-                    Toast.makeText(context, "Test alert sent! Check your notification bar.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Test alert sent with default sound!", Toast.LENGTH_SHORT).show()
                 }
             )
 
@@ -386,6 +451,7 @@ fun SettingsItem(
     icon: ImageVector,
     title: String,
     subtitle: String? = null,
+    trailing: @Composable (() -> Unit)? = null,
     onClick: () -> Unit = {}
 ) {
     Row(
@@ -416,6 +482,10 @@ fun SettingsItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+        if (trailing != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            trailing()
         }
     }
 }

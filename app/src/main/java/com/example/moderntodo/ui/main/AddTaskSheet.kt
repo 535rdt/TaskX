@@ -97,6 +97,7 @@ fun AddTaskSheet(
     val context = LocalContext.current
     val globalNotificationsEnabled by SettingsRepository.notificationsEnabledFlow.collectAsState()
     val globalDefaultRingtoneUri by SettingsRepository.defaultRingtoneUriFlow.collectAsState()
+    val globalDefaultAlarmEnabled by SettingsRepository.defaultAlarmEnabledFlow.collectAsState()
 
     // 1. Task Core Properties
     var title by remember { mutableStateOf(existingTask?.title ?: "") }
@@ -126,7 +127,7 @@ fun AddTaskSheet(
     // 4. Scheduling (Date, Time, Alarm, Sound)
     var date by remember { mutableStateOf<Long?>(existingTask?.dueDate) }
     var time by remember { mutableStateOf<Long?>(existingTask?.dueTime) }
-    var alarm by remember { mutableStateOf(existingTask?.hasAlarm ?: (existingTask?.dueTime != null || globalNotificationsEnabled)) }
+    var alarm by remember { mutableStateOf(existingTask?.hasAlarm ?: globalDefaultAlarmEnabled) }
     var ringtoneUri by remember { mutableStateOf<String?>(existingTask?.ringtoneUri ?: globalDefaultRingtoneUri) }
     var isPlayingPreview by remember { mutableStateOf(false) }
     var activeRingtone by remember { mutableStateOf<Ringtone?>(null) }
@@ -710,7 +711,7 @@ fun AddTaskSheet(
                                         c.set(Calendar.SECOND, 0)
                                         time = c.timeInMillis
                                         date = c.timeInMillis
-                                        alarm = true
+                                        alarm = globalDefaultAlarmEnabled
                                     },
                                     label = { Text("+1 Hour") },
                                     leadingIcon = { Icon(Icons.Outlined.Timer, null, modifier = Modifier.size(14.dp)) }
@@ -769,7 +770,7 @@ fun AddTaskSheet(
                                             c.set(Calendar.MINUTE, min)
                                             c.set(Calendar.SECOND, 0)
                                             time = c.timeInMillis
-                                            alarm = true
+                                            alarm = globalDefaultAlarmEnabled
                                             if (date == null) date = c.timeInMillis
                                         },
                                         calendar.get(Calendar.HOUR_OF_DAY),

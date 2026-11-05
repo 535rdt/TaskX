@@ -2,6 +2,8 @@ package com.example.moderntodo.util
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.media.RingtoneManager
+import android.net.Uri
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +24,9 @@ object SettingsRepository {
     
     private val _defaultRingtoneUriFlow = MutableStateFlow<String?>(null)
     val defaultRingtoneUriFlow: StateFlow<String?> = _defaultRingtoneUriFlow
+
+    private val _defaultAlarmEnabledFlow = MutableStateFlow(true)
+    val defaultAlarmEnabledFlow: StateFlow<Boolean> = _defaultAlarmEnabledFlow
 
     private val _accessTokenFlow = MutableStateFlow<String?>(null)
     val accessTokenFlow: StateFlow<String?> = _accessTokenFlow.asStateFlow()
@@ -104,6 +109,7 @@ object SettingsRepository {
         _defaultReminderTimeFlow.value = prefs.getLong("default_reminder_time", 9L * 60 * 60 * 1000)
         _notificationsEnabledFlow.value = prefs.getBoolean("notifications_enabled", true)
         _defaultRingtoneUriFlow.value = prefs.getString("default_ringtone_uri", null)
+        _defaultAlarmEnabledFlow.value = prefs.getBoolean("default_alarm_enabled", true)
         _accessTokenFlow.value = prefs.getString("access_token", null)
         _refreshTokenFlow.value = prefs.getString("refresh_token", null)
 
@@ -131,5 +137,22 @@ object SettingsRepository {
     fun setDefaultRingtoneUri(uri: String?) {
         prefs.edit().putString("default_ringtone_uri", uri).apply()
         _defaultRingtoneUriFlow.value = uri
+    }
+
+    fun setDefaultAlarmEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("default_alarm_enabled", enabled).apply()
+        _defaultAlarmEnabledFlow.value = enabled
+    }
+
+    fun getRingtoneTitle(context: Context, uriStr: String?): String {
+        if (uriStr.isNullOrBlank()) return "Default Notification"
+        return try {
+            val uri = Uri.parse(uriStr)
+            val r = RingtoneManager.getRingtone(context, uri)
+            val title = r?.getTitle(context)
+            if (!title.isNullOrBlank()) title else "Custom Sound"
+        } catch (_: Exception) {
+            "Custom Sound"
+        }
     }
 }
