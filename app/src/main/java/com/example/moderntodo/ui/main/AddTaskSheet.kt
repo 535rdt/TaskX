@@ -357,41 +357,52 @@ fun AddTaskSheet(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Section 2: Destination Workspace (Personal vs Project)
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Destination Workspace",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = !isProjectTask,
-                                onClick = { isProjectTask = false },
-                                label = { Text("Personal List") },
-                                leadingIcon = { Icon(Icons.Outlined.Checklist, null, modifier = Modifier.size(16.dp)) },
-                                modifier = Modifier.weight(1f)
-                            )
-                            FilterChip(
-                                selected = isProjectTask,
-                                onClick = { isProjectTask = true },
-                                label = { Text("Project Workspace") },
-                                leadingIcon = { Icon(Icons.Outlined.Folder, null, modifier = Modifier.size(16.dp)) },
-                                modifier = Modifier.weight(1f)
-                            )
+                // Section 2: List Selection for Normal Tasks (only when multiple lists exist) or Project selector
+                if (!isProjectTask) {
+                    if (normalTaskBooks.size > 1) {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                                Text(
+                                    text = "Task List",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    items(normalTaskBooks) { book ->
+                                        val bId = book.id ?: 1
+                                        val isSelected = selectedNormalBookId == bId
+                                        FilterChip(
+                                            selected = isSelected,
+                                            onClick = { selectedNormalBookId = bId },
+                                            label = { Text(book.name) }
+                                        )
+                                    }
+                                }
+                            }
                         }
+                        Spacer(modifier = Modifier.height(14.dp))
+                    }
+                } else {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Project Workspace",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
 
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        if (isProjectTask) {
                             if (projectTaskBooks.isEmpty()) {
                                 Text(
                                     text = "No projects created yet. Go to Projects tab to create one.",
@@ -432,27 +443,10 @@ fun AddTaskSheet(
                                     }
                                 }
                             }
-                        } else {
-                            if (normalTaskBooks.isNotEmpty()) {
-                                Text("List:", style = MaterialTheme.typography.bodySmall)
-                                Spacer(modifier = Modifier.height(6.dp))
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    items(normalTaskBooks) { book ->
-                                        val bId = book.id ?: 1
-                                        val isSelected = selectedNormalBookId == bId
-                                        FilterChip(
-                                            selected = isSelected,
-                                            onClick = { selectedNormalBookId = bId },
-                                            label = { Text(book.name) }
-                                        )
-                                    }
-                                }
-                            }
                         }
                     }
+                    Spacer(modifier = Modifier.height(14.dp))
                 }
-
-                Spacer(modifier = Modifier.height(14.dp))
 
                 // Section 3: 4-Tier Color Priority Level
                 Card(
@@ -832,312 +826,83 @@ fun AddTaskSheet(
                             }
                         }
 
-                        // Subtle hint when time is not yet set
-                        if (time == null) {
-                            Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Reminder Notification Switch & Tone Selector
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                modifier = Modifier.weight(1f)
                             ) {
                                 Icon(
-                                    Icons.Outlined.NotificationsNone,
+                                    imageVector = if (alarm) Icons.Filled.NotificationsActive else Icons.Outlined.NotificationsNone,
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.primary
+                                    tint = if (alarm) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Set a time above to configure custom notification sound",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "Reminder Alarm",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    val soundTitle = getRingtoneTitle(context, ringtoneUri)
+                                    Text(
+                                        text = if (alarm) {
+                                            if (time != null) "Alert at scheduled time ($soundTitle)" else "Alert on scheduled date"
+                                        } else "No reminder alert",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
+                            Switch(
+                                checked = alarm,
+                                onCheckedChange = { alarm = it }
+                            )
                         }
 
-                        // CUSTOM NOTIFICATION SOUND FUNCTION (Appears when time is set!)
-                        AnimatedVisibility(
-                            visible = time != null,
-                            enter = expandVertically() + fadeIn(),
-                            exit = shrinkVertically() + fadeOut()
-                        ) {
-                            Column {
-                                Spacer(modifier = Modifier.height(10.dp))
-                                Card(
-                                    shape = RoundedCornerShape(14.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                                    ),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Column(modifier = Modifier.padding(14.dp)) {
-                                        // Header Row
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Surface(
-                                                shape = CircleShape,
-                                                color = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(32.dp)
-                                            ) {
-                                                Box(contentAlignment = Alignment.Center) {
-                                                    Icon(
-                                                        Icons.Filled.NotificationsActive,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(18.dp),
-                                                        tint = MaterialTheme.colorScheme.onPrimary
-                                                    )
-                                                }
-                                            }
-                                            Spacer(modifier = Modifier.width(10.dp))
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = "Custom Notification Sound",
-                                                    style = MaterialTheme.typography.titleSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-                                                val timeFormatted = if (time != null) SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(time!!)) else ""
-                                                val dateFormatted = if (date != null) SimpleDateFormat("MMM d", Locale.getDefault()).format(Date(date!!)) else "Today"
-                                                Text(
-                                                    text = "🔔 Rings on $dateFormatted at $timeFormatted",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-                                            IconButton(
-                                                onClick = {
-                                                    time = null
-                                                    try { activeRingtone?.stop() } catch (_: Exception) {}
-                                                    isPlayingPreview = false
-                                                },
-                                                modifier = Modifier.size(28.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Filled.Close,
-                                                    contentDescription = "Clear time",
-                                                    modifier = Modifier.size(16.dp),
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
+                        if (alarm) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                                            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION or RingtoneManager.TYPE_ALARM)
+                                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
+                                            if (!ringtoneUri.isNullOrBlank()) {
+                                                putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(ringtoneUri))
                                             }
                                         }
-
-                                        Spacer(modifier = Modifier.height(12.dp))
-
-                                        // Current Sound Tile with Preview & Change
-                                        Surface(
-                                            shape = RoundedCornerShape(12.dp),
-                                            color = MaterialTheme.colorScheme.surface,
-                                            tonalElevation = 1.dp,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Filled.MusicNote,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(22.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(10.dp))
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        text = getRingtoneTitle(context, ringtoneUri),
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                    Text(
-                                                        text = if (ringtoneUri != null) "Custom Task Alert Tone" else "System Default Notification",
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                                // Play / Stop Preview button
-                                                FilledTonalButton(
-                                                    onClick = {
-                                                        if (isPlayingPreview) {
-                                                            try { activeRingtone?.stop() } catch (_: Exception) {}
-                                                            isPlayingPreview = false
-                                                            activeRingtone = null
-                                                        } else {
-                                                            try {
-                                                                activeRingtone?.stop()
-                                                                val uri = if (!ringtoneUri.isNullOrBlank()) {
-                                                                    Uri.parse(ringtoneUri)
-                                                                } else {
-                                                                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                                                                }
-                                                                val r = RingtoneManager.getRingtone(context, uri)
-                                                                activeRingtone = r
-                                                                r?.play()
-                                                                isPlayingPreview = true
-                                                            } catch (_: Exception) {
-                                                                isPlayingPreview = false
-                                                            }
-                                                        }
-                                                    },
-                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                                    shape = RoundedCornerShape(8.dp)
-                                                ) {
-                                                    Icon(
-                                                        if (isPlayingPreview) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                                                        contentDescription = if (isPlayingPreview) "Stop" else "Preview",
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                    Text(if (isPlayingPreview) "Stop" else "Listen", style = MaterialTheme.typography.labelMedium)
-                                                }
-                                            }
-                                        }
-
-                                        Spacer(modifier = Modifier.height(10.dp))
-
-                                        // Quick Sound Selection Chips
-                                        Text(
-                                            text = "Quick Sound Presets:",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        LazyRow(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            item {
-                                                FilterChip(
-                                                    selected = ringtoneUri == null,
-                                                    onClick = {
-                                                        ringtoneUri = null
-                                                        try {
-                                                            activeRingtone?.stop()
-                                                            val r = RingtoneManager.getRingtone(context, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-                                                            activeRingtone = r
-                                                            r?.play()
-                                                            isPlayingPreview = true
-                                                        } catch (_: Exception) {}
-                                                    },
-                                                    label = { Text("Default Tone") },
-                                                    leadingIcon = { Icon(Icons.Outlined.Notifications, null, modifier = Modifier.size(14.dp)) }
-                                                )
-                                            }
-                                            item {
-                                                FilterChip(
-                                                    selected = ringtoneUri == RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)?.toString(),
-                                                    onClick = {
-                                                        val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)?.toString()
-                                                        ringtoneUri = uri
-                                                        try {
-                                                            activeRingtone?.stop()
-                                                            if (uri != null) {
-                                                                val r = RingtoneManager.getRingtone(context, Uri.parse(uri))
-                                                                activeRingtone = r
-                                                                r?.play()
-                                                                isPlayingPreview = true
-                                                            }
-                                                        } catch (_: Exception) {}
-                                                    },
-                                                    label = { Text("Alarm Ring") },
-                                                    leadingIcon = { Icon(Icons.Outlined.Alarm, null, modifier = Modifier.size(14.dp)) }
-                                                )
-                                            }
-                                            item {
-                                                FilterChip(
-                                                    selected = ringtoneUri == RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)?.toString(),
-                                                    onClick = {
-                                                        val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)?.toString()
-                                                        ringtoneUri = uri
-                                                        try {
-                                                            activeRingtone?.stop()
-                                                            if (uri != null) {
-                                                                val r = RingtoneManager.getRingtone(context, Uri.parse(uri))
-                                                                activeRingtone = r
-                                                                r?.play()
-                                                                isPlayingPreview = true
-                                                            }
-                                                        } catch (_: Exception) {}
-                                                    },
-                                                    label = { Text("Phone Ringtone") },
-                                                    leadingIcon = { Icon(Icons.Outlined.RingVolume, null, modifier = Modifier.size(14.dp)) }
-                                                )
-                                            }
-                                            item {
-                                                AssistChip(
-                                                    onClick = {
-                                                        val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
-                                                            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION or RingtoneManager.TYPE_ALARM)
-                                                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
-                                                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
-                                                            if (!ringtoneUri.isNullOrBlank()) {
-                                                                putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(ringtoneUri))
-                                                            }
-                                                        }
-                                                        ringtonePickerLauncher.launch(intent)
-                                                    },
-                                                    label = { Text("Browse Device Sounds...") },
-                                                    leadingIcon = { Icon(Icons.Outlined.FolderOpen, null, modifier = Modifier.size(14.dp)) }
-                                                )
-                                            }
-                                        }
-
-                                        Spacer(modifier = Modifier.height(10.dp))
-
-                                        // Alert Mode & Test Notification
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Switch(
-                                                    checked = alarm,
-                                                    onCheckedChange = { alarm = it }
-                                                )
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Column {
-                                                    Text(
-                                                        text = if (alarm) "Full Alarm Alert" else "Notification Only",
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        fontWeight = FontWeight.SemiBold
-                                                    )
-                                                    Text(
-                                                        text = if (alarm) "Full-screen alert" else "Sound + Banner",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                            }
-
-                                            OutlinedButton(
-                                                onClick = {
-                                                    AlarmReceiver.showNotification(
-                                                        context = context,
-                                                        taskId = 9999,
-                                                        title = title.ifBlank { "Task Reminder" },
-                                                        desc = if (desc.isNotBlank()) desc else "Custom notification sound preview",
-                                                        ringtoneUriStr = ringtoneUri,
-                                                        hasAlarm = false
-                                                    )
-                                                    Toast.makeText(context, "Playing custom notification sound...", Toast.LENGTH_SHORT).show()
-                                                },
-                                                shape = RoundedCornerShape(10.dp),
-                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                                            ) {
-                                                Icon(Icons.Outlined.NotificationsActive, null, modifier = Modifier.size(14.dp))
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text("Test Alert", style = MaterialTheme.typography.labelMedium)
-                                            }
-                                        }
+                                        ringtonePickerLauncher.launch(intent)
                                     }
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Outlined.MusicNote, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Sound: ${getRingtoneTitle(context, ringtoneUri)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
+                                Text(
+                                    text = "Change",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
 
@@ -1407,6 +1172,7 @@ fun AddTaskSheet(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
+                if (isProjectTask) {
                 // Section 6: Workflow Status
                 Card(
                     shape = RoundedCornerShape(16.dp),
@@ -1725,6 +1491,7 @@ fun AddTaskSheet(
                     }
                 }
 
+                }
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
