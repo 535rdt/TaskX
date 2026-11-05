@@ -122,11 +122,16 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
     private val _filterPriority = MutableStateFlow<Int?>(null)
     val filterPriority = _filterPriority.asStateFlow()
 
+    private val _showAllUpcoming = MutableStateFlow(false)
+    val showAllUpcoming = _showAllUpcoming.asStateFlow()
+
     fun updateSearchQuery(query: String) { _searchQuery.value = query }
     fun updateSortOrder(order: SortOrder) { _sortOrder.value = order }
     fun toggleFilterImportant() { _filterImportant.value = !_filterImportant.value }
     fun toggleFilterFavorite() { _filterFavorite.value = !_filterFavorite.value }
     fun setFilterPriority(priority: Int?) { _filterPriority.value = priority }
+    fun toggleShowAllUpcoming() { _showAllUpcoming.value = !_showAllUpcoming.value }
+    fun setShowAllUpcoming(show: Boolean) { _showAllUpcoming.value = show }
 
     private data class FilterCriteria(
         val query: String,
@@ -149,9 +154,29 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
     @OptIn(ExperimentalCoroutinesApi::class)
     val pendingTasks: StateFlow<List<TaskEntity>> = combine(
         _currentBookId.flatMapLatest { bookId -> repository.getNormalPendingTasks(bookId) },
-        filterCriteria
-    ) { tasks, criteria ->
+        filterCriteria,
+        _showAllUpcoming
+    ) { tasks, criteria, showUpcoming ->
         var filtered = tasks.filter { !it.isProjectTask }
+
+        // Normal task section: tasks start showing 3 days before due date
+        // Overdue tasks and tasks without a due date are always shown.
+        // If the user searches by text or toggles showAllUpcoming, future tasks are surfaced.
+        if (!showUpcoming && criteria.query.isBlank()) {
+            val threeDaysAhead = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, 3)
+                set(Calendar.HOUR_OF_DAY, 23)
+                set(Calendar.MINUTE, 59)
+                set(Calendar.SECOND, 59)
+                set(Calendar.MILLISECOND, 999)
+            }.timeInMillis
+
+            filtered = filtered.filter { task ->
+                val due = task.dueDate ?: task.dueTime
+                due == null || due <= threeDaysAhead
+            }
+        }
+
         if (criteria.query.isNotBlank()) {
             filtered = filtered.filter { it.title.contains(criteria.query, ignoreCase = true) }
         }
@@ -169,6 +194,28 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
             SortOrder.PRIORITY_ASC -> filtered.sortedBy { com.example.moderntodo.util.PriorityLevel.fromTask(it).level }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val hiddenUpcomingCount: StateFlow<Int> = combine(
+        _currentBookId.flatMapLatest { bookId -> repository.getNormalPendingTasks(bookId) },
+        _showAllUpcoming
+    ) { tasks, showUpcoming ->
+        if (showUpcoming) {
+            0
+        } else {
+            val threeDaysAhead = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, 3)
+                set(Calendar.HOUR_OF_DAY, 23)
+                set(Calendar.MINUTE, 59)
+                set(Calendar.SECOND, 59)
+                set(Calendar.MILLISECOND, 999)
+            }.timeInMillis
+
+            tasks.count { task ->
+                !task.isProjectTask && ((task.dueDate ?: task.dueTime)?.let { it > threeDaysAhead } ?: false)
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     // -------------------------------------------------------------
     // Project Tasks Management & Filters

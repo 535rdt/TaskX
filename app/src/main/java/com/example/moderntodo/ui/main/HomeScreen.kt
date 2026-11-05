@@ -73,6 +73,8 @@ fun HomeScreen(
     val allPendingTasks by viewModel.allPendingTasks.collectAsState()
     val allTasks by viewModel.allTasks.collectAsState()
     val currentBookId by viewModel.currentBookId.collectAsState()
+    val hiddenUpcomingCount by viewModel.hiddenUpcomingCount.collectAsState()
+    val showAllUpcoming by viewModel.showAllUpcoming.collectAsState()
 
     var currentBottomTab by remember { mutableStateOf("Tasks") }
     var taskToEdit by remember { mutableStateOf<TaskEntity?>(null) }
@@ -781,7 +783,7 @@ fun HomeScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                text = "Tasks (${pendingTasks.size})",
+                                                text = if (showAllUpcoming) "All Tasks (${pendingTasks.size})" else "Tasks (${pendingTasks.size})",
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.onSurface
@@ -808,6 +810,44 @@ fun HomeScreen(
                                                     style = MaterialTheme.typography.labelMedium,
                                                     fontWeight = FontWeight.Bold
                                                 )
+                                            }
+                                        }
+
+                                        if (hiddenUpcomingCount > 0 || showAllUpcoming) {
+                                            Surface(
+                                                shape = RoundedCornerShape(12.dp),
+                                                color = if (showAllUpcoming) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                                border = BorderStroke(1.dp, if (showAllUpcoming) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                                                    .clickable { viewModel.toggleShowAllUpcoming() }
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (showAllUpcoming) Icons.Filled.Visibility else Icons.Outlined.Schedule,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = if (showAllUpcoming) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Text(
+                                                        text = if (showAllUpcoming) "Showing all upcoming tasks • Tap to hide >3 days" else "$hiddenUpcomingCount upcoming task${if (hiddenUpcomingCount > 1) "s" else ""} scheduled >3 days away • Tap to view",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = if (showAllUpcoming) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    Text(
+                                                        text = if (showAllUpcoming) "Hide" else "Show",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
                                             }
                                         }
 
@@ -851,7 +891,10 @@ fun HomeScreen(
                                                     Spacer(Modifier.height(6.dp))
 
                                                     Text(
-                                                        text = "No pending tasks in '${currentBook?.name ?: "this list"}'. Tap below to create one or view completed.",
+                                                        text = if (hiddenUpcomingCount > 0)
+                                                            "You have $hiddenUpcomingCount task${if (hiddenUpcomingCount > 1) "s" else ""} scheduled for later (>3 days away). Tap below to view them or create a new one."
+                                                        else
+                                                            "No pending tasks in '${currentBook?.name ?: "this list"}'. Tap below to create one or view completed.",
                                                         style = MaterialTheme.typography.bodyMedium,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                         textAlign = TextAlign.Center
@@ -860,18 +903,29 @@ fun HomeScreen(
                                                     Spacer(Modifier.height(20.dp))
 
                                                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                                        FilledTonalButton(
-                                                            onClick = {
-                                                                taskToEdit = null
-                                                                isAddingProjectTask = false
-                                                                targetProjectIdForAdd = null
-                                                                showAddTask = true
-                                                            },
-                                                            shape = RoundedCornerShape(14.dp)
-                                                        ) {
-                                                            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                                                            Spacer(Modifier.width(8.dp))
-                                                            Text("New Task", fontWeight = FontWeight.Bold)
+                                                        if (hiddenUpcomingCount > 0) {
+                                                            FilledTonalButton(
+                                                                onClick = { viewModel.toggleShowAllUpcoming() },
+                                                                shape = RoundedCornerShape(14.dp)
+                                                            ) {
+                                                                Icon(Icons.Filled.Visibility, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                                Spacer(Modifier.width(8.dp))
+                                                                Text("Show Upcoming ($hiddenUpcomingCount)", fontWeight = FontWeight.Bold)
+                                                            }
+                                                        } else {
+                                                            FilledTonalButton(
+                                                                onClick = {
+                                                                    taskToEdit = null
+                                                                    isAddingProjectTask = false
+                                                                    targetProjectIdForAdd = null
+                                                                    showAddTask = true
+                                                                },
+                                                                shape = RoundedCornerShape(14.dp)
+                                                            ) {
+                                                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                                Spacer(Modifier.width(8.dp))
+                                                                Text("New Task", fontWeight = FontWeight.Bold)
+                                                            }
                                                         }
 
                                                         OutlinedButton(
@@ -2903,6 +2957,7 @@ fun FilterSheet(
     val filterImportant by viewModel.filterImportant.collectAsState()
     val filterFavorite by viewModel.filterFavorite.collectAsState()
     val filterPriority by viewModel.filterPriority.collectAsState()
+    val showAllUpcoming by viewModel.showAllUpcoming.collectAsState()
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(16.dp).fillMaxWidth().navigationBarsPadding()) {
@@ -2961,6 +3016,7 @@ fun FilterSheet(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = filterImportant, onClick = { viewModel.toggleFilterImportant() }, label = { Text("Flagged") }, leadingIcon = { if (filterImportant) Icon(Icons.Filled.Flag, null) })
                 FilterChip(selected = filterFavorite, onClick = { viewModel.toggleFilterFavorite() }, label = { Text("Favorite") }, leadingIcon = { if (filterFavorite) Icon(Icons.Filled.Star, null) })
+                FilterChip(selected = showAllUpcoming, onClick = { viewModel.toggleShowAllUpcoming() }, label = { Text("Show >3 days") }, leadingIcon = { if (showAllUpcoming) Icon(Icons.Filled.Visibility, null) })
             }
 
             Spacer(modifier = Modifier.height(32.dp))
