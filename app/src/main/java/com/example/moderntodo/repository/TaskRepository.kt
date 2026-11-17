@@ -99,6 +99,33 @@ class TaskRepository(
     }
 
     suspend fun insertTask(task: TaskEntity): Long {
+        // 1. SyncId check: if syncId is present, check if already in database
+        if (!task.syncId.isNullOrBlank()) {
+            val existing = taskDao.getTaskBySyncId(task.syncId)
+            if (existing != null) {
+                Log.d("TaskRepository", "Task with syncId '${task.syncId}' already exists locally (id=${existing.id}), updating instead of duplicating")
+                taskDao.updateTask(task.copy(id = existing.id))
+                return (existing.id ?: 0).toLong()
+            }
+        }
+
+        // 2. Local duplicate check: same title, book, due date/time, and status
+        val existingTasks = taskDao.getTasksForBookList(task.bookId)
+        val duplicate = existingTasks.find {
+            it.title.trim().equals(task.title.trim(), ignoreCase = true) &&
+            it.dueDate == task.dueDate &&
+            it.dueTime == task.dueTime &&
+            it.isProjectTask == task.isProjectTask &&
+            it.isCompleted == task.isCompleted
+        }
+        if (duplicate != null) {
+            Log.d("TaskRepository", "Task with title '${task.title}' already exists in book ${task.bookId} (id=${duplicate.id}), updating instead of duplicating")
+            if (duplicate.syncId.isNullOrBlank() && !task.syncId.isNullOrBlank()) {
+                taskDao.updateTask(duplicate.copy(syncId = task.syncId))
+            }
+            return (duplicate.id ?: 0).toLong()
+        }
+
         val cleanTask = if (task.id == 0) task.copy(id = null) else task
         val generatedId = taskDao.insertTask(cleanTask)
         val insertedTask = cleanTask.copy(id = generatedId.toInt())
@@ -133,6 +160,10 @@ class TaskRepository(
                 Log.d("TaskRepository", "Remote deleteTask skipped/failed: ${e.message}")
             }
         }
+    }
+
+    suspend fun getTaskById(id: Int): TaskEntity? {
+        return taskDao.getTaskById(id)
     }
 
     suspend fun getTaskBySyncId(syncId: String): TaskEntity? {
@@ -250,10 +281,11 @@ class TaskRepository(
         withContext(Dispatchers.IO) {
             try {
                 val allTasks = taskDao.getAllTasksList()
-                val groups = allTasks.groupBy {
-                    "${it.bookId}_${it.title.trim().lowercase(java.util.Locale.ROOT)}_${it.dueDate}_${it.dueTime}"
-                }
-                for ((_, list) in groups) {
+                val deletedIds = mutableListOf<Int>()
+
+                // 1. Group by non-null syncId
+                val syncIdGroups = allTasks.filter { !it.syncId.isNullOrBlank() }.groupBy { it.syncId!! }
+                for ((_, list) in syncIdGroups) {
                     if (list.size > 1) {
                         val sorted = list.sortedWith(
                             compareByDescending<TaskEntity> { it.isCompleted }
@@ -262,9 +294,45 @@ class TaskRepository(
                         val toKeep = sorted.first()
                         val toDelete = sorted.drop(1)
                         for (dup in toDelete) {
-                            taskDao.deleteTask(dup)
+                            dup.id?.let {
+                                taskDao.deleteTaskById(it)
+                                deletedIds.add(it)
+                            }
                         }
                     }
+                }
+
+                // 2. Group remaining tasks by bookId, title, dueDate, dueTime, isCompleted
+                val remaining = taskDao.getAllTasksList()
+                val signatureGroups = remaining.groupBy {
+                    "${it.bookId}_${it.title.trim().lowercase(java.util.Locale.ROOT)}_${it.dueDate}_${it.dueTime}_${it.isCompleted}"
+                }
+                for ((_, list) in signatureGroups) {
+                    if (list.size > 1) {
+                        val sorted = list.sortedWith(
+                            compareByDescending<TaskEntity> { !it.syncId.isNullOrBlank() }
+                                .thenByDescending { it.id ?: 0 }
+                        )
+                        val toKeep = sorted.first()
+                        val toDelete = sorted.drop(1)
+                        for (dup in toDelete) {
+                            dup.id?.let {
+                                taskDao.deleteTaskById(it)
+                                deletedIds.add(it)
+                            }
+                        }
+                    }
+                }
+
+                // 3. Cancel alarms for purged duplicates
+                if (deletedIds.isNotEmpty()) {
+                    Log.d("TaskRepository", "Cleaned up ${deletedIds.size} duplicate tasks from database")
+                    try {
+                        val context = com.example.moderntodo.ModernToDoApp.instance
+                        for (id in deletedIds) {
+                            com.example.moderntodo.util.AlarmScheduler.cancel(context, id)
+                        }
+                    } catch (_: Exception) {}
                 }
             } catch (e: Exception) {
                 Log.e("TaskRepository", "removeDuplicateTasks error", e)
@@ -288,21 +356,22 @@ class TaskRepository(
                 if (remoteTasks.isNotEmpty()) {
                     val localTasks = taskDao.getAllTasksList()
                     val localSyncIds = localTasks.mapNotNull { it.syncId }.toSet()
-                    val localSignatures = localTasks.map {
-                        "${it.bookId}_${it.title.trim().lowercase(java.util.Locale.ROOT)}_${it.dueDate}"
+                    val localTitlesInBooks = localTasks.map {
+                        "${it.bookId}_${it.title.trim().lowercase(java.util.Locale.ROOT)}"
                     }.toSet()
 
                     val newTasksToInsert = mutableListOf<TaskEntity>()
                     for (remote in remoteTasks) {
                         val hasSyncId = !remote.syncId.isNullOrBlank() && localSyncIds.contains(remote.syncId)
-                        val signature = "${remote.bookId}_${remote.title.trim().lowercase(java.util.Locale.ROOT)}_${remote.dueDate}"
-                        val hasSignature = localSignatures.contains(signature)
-                        if (!hasSyncId && !hasSignature) {
+                        val titleKey = "${remote.bookId}_${remote.title.trim().lowercase(java.util.Locale.ROOT)}"
+                        val hasTitleInBook = localTitlesInBooks.contains(titleKey)
+                        if (!hasSyncId && !hasTitleInBook) {
                             newTasksToInsert.add(remote.copy(id = null))
                         }
                     }
                     if (newTasksToInsert.isNotEmpty()) {
                         taskDao.insertTasks(newTasksToInsert)
+                        removeDuplicateTasks()
                     }
                 }
             } catch (e: Exception) {

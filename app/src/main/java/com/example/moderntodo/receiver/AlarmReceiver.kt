@@ -17,12 +17,18 @@ import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.moderntodo.MainActivity
+import com.example.moderntodo.ModernToDoApp
 import com.example.moderntodo.R
+import com.example.moderntodo.util.AlarmScheduler
+import com.example.moderntodo.util.SettingsRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Log.d("AlarmReceiver", "Alarm broadcast received!")
-        if (!com.example.moderntodo.util.SettingsRepository.notificationsEnabledFlow.value) {
+        if (!SettingsRepository.notificationsEnabledFlow.value) {
             Log.d("AlarmReceiver", "Notifications disabled in app settings. Skipping.")
             return
         }
@@ -34,6 +40,26 @@ class AlarmReceiver : BroadcastReceiver() {
         val hasAlarm = intent.getBooleanExtra("EXTRA_HAS_ALARM", false)
 
         showNotification(context, taskId, title, desc, ringtoneUriStr, hasAlarm)
+
+        if (taskId > 0) {
+            val pendingResult = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val app = context.applicationContext as? ModernToDoApp
+                    if (app != null) {
+                        val repo = app.repository
+                        val task = repo.getTaskById(taskId)
+                        if (task != null && !task.isCompleted && !task.repeatMode.isNullOrBlank() && task.repeatMode != "None" && task.repeatMode != "Off") {
+                            AlarmScheduler.rescheduleNextRepeat(context, repo, task)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("AlarmReceiver", "Failed to reschedule repeating task $taskId", e)
+                } finally {
+                    pendingResult.finish()
+                }
+            }
+        }
     }
 
     companion object {

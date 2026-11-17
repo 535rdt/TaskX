@@ -491,7 +491,7 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
         val targetBookId = if (isProjectTask && projectId != null) projectId else (existingTask?.bookId ?: _currentBookId.value)
         val signature = "${title.trim()}_${date}_${time}_${isProjectTask}_$targetBookId"
         val now = System.currentTimeMillis()
-        if (existingTask == null && signature == lastSavedSignature && (now - lastSavedTimestamp) < 1500L) {
+        if (existingTask == null && signature == lastSavedSignature && (now - lastSavedTimestamp) < 2500L) {
             android.util.Log.d("TaskViewModel", "Ignored rapid duplicate saveTask call for '$title'")
             return
         }
@@ -546,6 +546,54 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                     existingTask.projectId ?: existingTask.bookId
                 )
             } else {
+                // Check if an existing duplicate is already present in this book before creating new
+                val existingTasks = repository.getTasksForBookList(targetBookId)
+                val duplicate = existingTasks.find {
+                    !it.isCompleted &&
+                    it.title.trim().equals(title.trim(), ignoreCase = true) &&
+                    it.dueDate == date &&
+                    it.dueTime == time &&
+                    it.isProjectTask == isProjectTask
+                }
+                if (duplicate != null) {
+                    android.util.Log.d("TaskViewModel", "Task with title '$title' already exists in book $targetBookId, updating existing task")
+                    val updated = duplicate.copy(
+                        title = title,
+                        description = desc,
+                        hasAlarm = hasAlarm,
+                        ringtoneUri = ringtoneUri,
+                        repeatMode = repeatMode,
+                        repeatInterval = repeatInterval,
+                        repeatUnit = repeatUnit,
+                        repeatStarts = repeatStarts,
+                        repeatEndsType = repeatEndsType,
+                        repeatEndsValue = repeatEndsValue,
+                        repeatDaysOfWeek = repeatDaysOfWeek,
+                        repeatMonths = repeatMonths,
+                        repeatYears = repeatYears,
+                        isFavorite = isFavorite,
+                        isImportant = isImportant || priority <= 2,
+                        subTasks = subTasks,
+                        tags = tags,
+                        priority = priority,
+                        status = status,
+                        comments = comments,
+                        attachments = attachments,
+                        assignee = assignee
+                    )
+                    repository.updateTask(updated)
+                    com.example.moderntodo.util.AlarmScheduler.cancel(context, updated.id ?: 0)
+                    if (hasAlarm || updated.dueTime != null || updated.dueDate != null) {
+                        com.example.moderntodo.util.AlarmScheduler.schedule(context, updated)
+                    }
+                    com.example.moderntodo.data.remote.SharedBookRealtimeCoordinator.notifyLocalMutation(
+                        context,
+                        repository,
+                        targetBookId
+                    )
+                    return@launch
+                }
+
                 // Insert
                 val task = TaskEntity(
                     syncId = syncId,
@@ -653,39 +701,37 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                 com.example.moderntodo.util.AlarmScheduler.cancel(context, task.id ?: 0)
                 
                 // Handle repetition
-                if (task.repeatMode != null && task.repeatMode != "None") {
-                    val nextDate = task.dueDate?.let { advanceTime(it, task.repeatInterval, task.repeatUnit) }
-                    val nextTime = task.dueTime?.let { advanceTime(it, task.repeatInterval, task.repeatUnit) }
+                if (task.repeatMode != null && task.repeatMode != "None" && task.repeatMode != "Off") {
+                    val now = System.currentTimeMillis()
+                    val baseTime = task.dueTime ?: task.dueDate ?: now
+                    val nextTrigger = com.example.moderntodo.util.AlarmScheduler.computeNextRepeatTime(task, baseTime, now)
                     
-                    // Check Ends condition
-                    var shouldRepeat = true
-                    if (task.repeatEndsType == "OnDate" && task.repeatEndsValue != null && nextDate != null) {
-                        if (nextDate > task.repeatEndsValue) {
-                            shouldRepeat = false
-                        }
-                    } else if (task.repeatEndsType == "After" && task.repeatEndsValue != null) {
-                        // Very naive approach: decrement ends value each time
-                        if (task.repeatEndsValue <= 1) {
-                            shouldRepeat = false
-                        }
-                    }
+                    if (nextTrigger != null) {
+                        val newEndsValue = if (task.repeatEndsType == "After" && task.repeatEndsValue != null) {
+                            val v = task.repeatEndsValue - 1
+                            if (v <= 0) null else v
+                        } else task.repeatEndsValue
+                        val newRepeatMode = if (task.repeatEndsType == "After" && newEndsValue == null) null else task.repeatMode
 
-                    if (shouldRepeat) {
-                        val newEndsValue = if (task.repeatEndsType == "After" && task.repeatEndsValue != null) task.repeatEndsValue - 1 else task.repeatEndsValue
+                        val newDueDate = if (task.dueDate != null) nextTrigger else null
+                        val newDueTime = if (task.dueTime != null) nextTrigger else null
+
                         val clonedTask = task.copy(
                             id = 0, // new ID for insertion
+                            syncId = "task_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().replace("-", "").take(8),
                             isCompleted = false,
-                            dueDate = nextDate,
-                            dueTime = nextTime,
-                            repeatEndsValue = newEndsValue
+                            dueDate = newDueDate,
+                            dueTime = newDueTime,
+                            repeatEndsValue = newEndsValue,
+                            repeatMode = newRepeatMode
                         )
                         val newId = repository.insertTask(clonedTask)
-                        if (clonedTask.hasAlarm) {
+                        if (clonedTask.hasAlarm || clonedTask.dueTime != null || clonedTask.dueDate != null) {
                             com.example.moderntodo.util.AlarmScheduler.schedule(context, clonedTask.copy(id = newId.toInt()))
                         }
                     }
                 }
-            } else if (updatedTask.hasAlarm) {
+            } else if (updatedTask.hasAlarm || updatedTask.dueTime != null || updatedTask.dueDate != null) {
                 com.example.moderntodo.util.AlarmScheduler.schedule(context, updatedTask)
             }
             com.example.moderntodo.data.remote.SharedBookRealtimeCoordinator.notifyLocalMutation(

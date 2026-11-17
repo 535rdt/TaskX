@@ -541,6 +541,10 @@ object SharedBookService {
             }
         }
 
+        try {
+            repository.removeDuplicateTasks()
+        } catch (_: Exception) {}
+
         val prefs = getPrefs(context, currentUserEmail)
         prefs.edit().putLong("last_sync_time_$bookId", payload.updatedAt).apply()
 
