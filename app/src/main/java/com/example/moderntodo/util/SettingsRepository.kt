@@ -28,7 +28,7 @@ object SettingsRepository {
     private val _defaultAlarmEnabledFlow = MutableStateFlow(true)
     val defaultAlarmEnabledFlow: StateFlow<Boolean> = _defaultAlarmEnabledFlow
 
-    private val _showUpcomingThreeDaysFlow = MutableStateFlow(true)
+    private val _showUpcomingThreeDaysFlow = MutableStateFlow(false)
     val showUpcomingThreeDaysFlow: StateFlow<Boolean> = _showUpcomingThreeDaysFlow
 
     private val _showCompletedSectionFlow = MutableStateFlow(true)
@@ -119,7 +119,8 @@ object SettingsRepository {
         _notificationsEnabledFlow.value = prefs.getBoolean("notifications_enabled", true)
         _defaultRingtoneUriFlow.value = prefs.getString("default_ringtone_uri", null)
         _defaultAlarmEnabledFlow.value = prefs.getBoolean("default_alarm_enabled", true)
-        _showUpcomingThreeDaysFlow.value = prefs.getBoolean("show_upcoming_three_days", true)
+        // Default is false: Repeat tasks ONLY show on their due date (or overdue)
+        _showUpcomingThreeDaysFlow.value = prefs.getBoolean("show_repeat_tasks_early", false)
         _showCompletedSectionFlow.value = prefs.getBoolean("show_completed_section", true)
         _showTaskCountdownFlow.value = prefs.getBoolean("show_task_countdown", true)
         _accessTokenFlow.value = prefs.getString("access_token", null)
@@ -157,7 +158,7 @@ object SettingsRepository {
     }
 
     fun setShowUpcomingThreeDays(enabled: Boolean) {
-        prefs.edit().putBoolean("show_upcoming_three_days", enabled).apply()
+        prefs.edit().putBoolean("show_repeat_tasks_early", enabled).apply()
         _showUpcomingThreeDaysFlow.value = enabled
     }
 

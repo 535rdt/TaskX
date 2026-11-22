@@ -877,7 +877,7 @@ fun HomeScreen(
 
                                                     Text(
                                                         text = if (hiddenUpcomingCount > 0)
-                                                            "You have $hiddenUpcomingCount task${if (hiddenUpcomingCount > 1) "s" else ""} scheduled for later (>3 days away). Tap below to view them or create a new one."
+                                                            "You have $hiddenUpcomingCount task${if (hiddenUpcomingCount > 1) "s" else ""} scheduled for later. Tap below to view them or create a new one."
                                                         else
                                                             "No pending tasks in '${currentBook?.name ?: "this list"}'. Tap below to create one or view completed.",
                                                         style = MaterialTheme.typography.bodyMedium,

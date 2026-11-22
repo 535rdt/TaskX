@@ -189,8 +189,8 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                     // Single time task: NOT applicable to 3-day hide rule. Always show!
                     true
                 } else {
-                    // Repeat task: tasks due in 3 days show, other repeat tasks hide.
-                    val due = task.dueDate ?: task.dueTime
+                    // Repeat task: ONLY show when the due date (due date is today or overdue).
+                    val due = task.dueDate ?: task.dueTime ?: task.repeatStarts
                     if (due == null) {
                         true
                     } else if (showThreeDaysEarly) {
@@ -251,7 +251,7 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                     // Single-time tasks are never hidden by 3-day rule
                     false
                 } else {
-                    val due = task.dueDate ?: task.dueTime ?: return@count false
+                    val due = task.dueDate ?: task.dueTime ?: task.repeatStarts ?: return@count false
                     if (showThreeDaysEarly) {
                         due > threeDaysAhead
                     } else {

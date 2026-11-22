@@ -162,14 +162,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                         checked = showUpcomingThreeDays,
                         onCheckedChange = { newState ->
                             SettingsRepository.setShowUpcomingThreeDays(newState)
-                            Toast.makeText(context, if (newState) "3-day repeat advance view turned ON" else "3-day repeat advance view turned OFF", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, if (newState) "Repeat tasks advance view turned ON" else "Repeat tasks will only show on their due date", Toast.LENGTH_SHORT).show()
                         }
                     )
                 },
                 onClick = {
                     val newState = !showUpcomingThreeDays
                     SettingsRepository.setShowUpcomingThreeDays(newState)
-                    Toast.makeText(context, if (newState) "3-day repeat advance view turned ON" else "3-day repeat advance view turned OFF", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, if (newState) "Repeat tasks advance view turned ON" else "Repeat tasks will only show on their due date", Toast.LENGTH_SHORT).show()
                 }
             )
 
