@@ -125,6 +125,9 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
     private val _showAllUpcoming = MutableStateFlow(false)
     val showAllUpcoming = _showAllUpcoming.asStateFlow()
 
+    private val _lastRepeatedClonedTaskId = MutableStateFlow<Int?>(null)
+    val lastRepeatedClonedTaskId: StateFlow<Int?> = _lastRepeatedClonedTaskId
+
     fun updateSearchQuery(query: String) { _searchQuery.value = query }
     fun updateSortOrder(order: SortOrder) { _sortOrder.value = order }
     fun toggleFilterImportant() { _filterImportant.value = !_filterImportant.value }
@@ -781,9 +784,10 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                         }
                         val newDueTime = if (task.dueTime != null) nextTrigger else null
 
+                        val parentId = task.id ?: 0
                         val clonedTask = task.copy(
                             id = 0, // new ID for insertion
-                            syncId = "task_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().replace("-", "").take(8),
+                            syncId = "repeat_from_${parentId}_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().replace("-", "").take(6),
                             isCompleted = false,
                             dueDate = newDueDate,
                             dueTime = newDueTime,
@@ -791,19 +795,94 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                             repeatMode = newRepeatMode
                         )
                         val newId = repository.insertTask(clonedTask)
+                        _lastRepeatedClonedTaskId.value = newId.toInt()
                         if (clonedTask.hasAlarm || clonedTask.dueTime != null || clonedTask.dueDate != null) {
                             com.example.moderntodo.util.AlarmScheduler.schedule(context, clonedTask.copy(id = newId.toInt()))
                         }
                     }
                 }
-            } else if (updatedTask.hasAlarm || updatedTask.dueTime != null || updatedTask.dueDate != null) {
-                com.example.moderntodo.util.AlarmScheduler.schedule(context, updatedTask)
+            } else {
+                // Task was UNCOMPLETED (unchecked)
+                // Check if there is an active future recurrence cloned from this task and remove it
+                val allBookTasks = repository.getTasksForBookList(task.bookId)
+                val taskId = task.id
+                val futureClone = allBookTasks.find {
+                    !it.isCompleted && (
+                        (taskId != null && it.syncId?.startsWith("repeat_from_${taskId}_") == true) ||
+                        (it.title.trim().equals(task.title.trim(), ignoreCase = true) && it.id != task.id)
+                    )
+                }
+                if (futureClone != null && futureClone.id != null) {
+                    repository.deleteTask(futureClone)
+                    com.example.moderntodo.util.AlarmScheduler.cancel(context, futureClone.id)
+                }
+
+                if (updatedTask.hasAlarm || updatedTask.dueTime != null || updatedTask.dueDate != null) {
+                    com.example.moderntodo.util.AlarmScheduler.schedule(context, updatedTask)
+                }
             }
             com.example.moderntodo.data.remote.SharedBookRealtimeCoordinator.notifyLocalMutation(
                 context,
                 repository,
                 task.projectId ?: task.bookId
             )
+        }
+    }
+
+    fun undoRepeatTask(context: android.content.Context, currentTask: TaskEntity) {
+        viewModelScope.launch {
+            val syncId = currentTask.syncId ?: ""
+            val parentId = if (syncId.startsWith("repeat_from_")) {
+                syncId.split("_").getOrNull(2)?.toIntOrNull()
+            } else null
+
+            // 1. Delete current cloned task
+            currentTask.id?.let {
+                repository.deleteTask(currentTask)
+                com.example.moderntodo.util.AlarmScheduler.cancel(context, it)
+            }
+
+            // 2. Restore parent task to pending
+            if (parentId != null) {
+                val parentTask = repository.getTaskById(parentId)
+                if (parentTask != null) {
+                    val restored = parentTask.copy(isCompleted = false)
+                    repository.updateTask(restored)
+                    if (restored.hasAlarm || restored.dueTime != null || restored.dueDate != null) {
+                        com.example.moderntodo.util.AlarmScheduler.schedule(context, restored)
+                    }
+                }
+            } else {
+                // Fallback: find latest completed task with same title and bookId
+                val allBookTasks = repository.getTasksForBookList(currentTask.bookId)
+                val parentTask = allBookTasks.filter {
+                    it.isCompleted && it.title.trim().equals(currentTask.title.trim(), ignoreCase = true)
+                }.maxByOrNull { it.id ?: 0 }
+                if (parentTask != null) {
+                    val restored = parentTask.copy(isCompleted = false)
+                    repository.updateTask(restored)
+                    if (restored.hasAlarm || restored.dueTime != null || restored.dueDate != null) {
+                        com.example.moderntodo.util.AlarmScheduler.schedule(context, restored)
+                    }
+                }
+            }
+
+            com.example.moderntodo.data.remote.SharedBookRealtimeCoordinator.notifyLocalMutation(
+                context,
+                repository,
+                currentTask.projectId ?: currentTask.bookId
+            )
+        }
+    }
+
+    fun undoLastRepeat(context: android.content.Context) {
+        val lastId = _lastRepeatedClonedTaskId.value ?: return
+        viewModelScope.launch {
+            val task = repository.getTaskById(lastId)
+            if (task != null) {
+                undoRepeatTask(context, task)
+                _lastRepeatedClonedTaskId.value = null
+            }
         }
     }
 

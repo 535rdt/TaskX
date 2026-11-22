@@ -2,6 +2,7 @@ package com.example.moderntodo.ui.main
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.animation.*
@@ -657,6 +658,10 @@ fun ProjectTasksScreen(
                                             }
                                         },
                                         onRepeatToggle = { mode -> viewModel.toggleTaskRepeat(task, mode) },
+                                        onUndoRepeat = {
+                                            viewModel.undoRepeatTask(context, task)
+                                            Toast.makeText(context, "Repeat undone. Task restored to today.", Toast.LENGTH_SHORT).show()
+                                        },
                                         onStatusChange = { newStatus -> viewModel.updateTaskStatus(task, newStatus) },
                                         onCommentChange = { newComment -> viewModel.updateTaskComment(task, newComment) },
                                         onPriorityChange = { newPriority -> viewModel.updateTaskPriority(task, newPriority) },
@@ -802,7 +807,8 @@ fun ProjectTaskRow(
     onStatusChange: (String) -> Unit = {},
     onCommentChange: (String) -> Unit = {},
     onPriorityChange: (Int) -> Unit = {},
-    onDelete: () -> Unit = {}
+    onDelete: () -> Unit = {},
+    onUndoRepeat: (() -> Unit)? = null
 ) {
     val pLevel = PriorityLevel.fromTask(task)
     val projectColor = try {
@@ -1055,6 +1061,18 @@ fun ProjectTaskRow(
                                     expanded = showRepeatMenu,
                                     onDismissRequest = { showRepeatMenu = false }
                                 ) {
+                                    val isRepeatClone = task.syncId?.startsWith("repeat_from_") == true
+                                    if (isRepeatClone && onUndoRepeat != null) {
+                                        DropdownMenuItem(
+                                            text = { Text("Undo Repeat", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) },
+                                            leadingIcon = { Icon(Icons.Filled.Refresh, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp)) },
+                                            onClick = {
+                                                onUndoRepeat()
+                                                showRepeatMenu = false
+                                            }
+                                        )
+                                        HorizontalDivider()
+                                    }
                                     DropdownMenuItem(
                                         text = { Text("Repeat: OFF", color = if (!isRepeating) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) },
                                         leadingIcon = { Icon(Icons.Outlined.Close, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp)) },
@@ -1084,6 +1102,36 @@ fun ProjectTaskRow(
                                                 onRepeatToggle(modeOption)
                                                 showRepeatMenu = false
                                             }
+                                        )
+                                    }
+                                }
+                            }
+
+                            val isRepeatClone = task.syncId?.startsWith("repeat_from_") == true
+                            if (isRepeatClone && onUndoRepeat != null) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                    border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                                    modifier = Modifier.clickable { onUndoRepeat() }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Refresh,
+                                            contentDescription = "Undo Repeat",
+                                            modifier = Modifier.size(11.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "Undo Repeat",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 10.sp
                                         )
                                     }
                                 }

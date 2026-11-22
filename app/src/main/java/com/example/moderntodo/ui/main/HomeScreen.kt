@@ -96,6 +96,8 @@ fun HomeScreen(
     val isSelectionMode = selectedTaskIds.isNotEmpty()
     var showDeleteMultipleConfirm by remember { mutableStateOf(false) }
     var isSavingTask by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    var taskToUndoRepeat by remember { mutableStateOf<TaskEntity?>(null) }
 
     BackHandler(enabled = isSelectionMode) {
         selectedTaskIds.clear()
@@ -577,7 +579,8 @@ fun HomeScreen(
                                     Icon(Icons.Filled.Add, contentDescription = "Add Task", modifier = Modifier.size(26.dp))
                                 }
                             }
-                        }
+                        },
+                        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
                     ) { innerPadding ->
                         if (showDeleteMultipleConfirm) {
                             AlertDialog(
@@ -978,7 +981,26 @@ fun HomeScreen(
                                                         content = {
                                                             TaskRow(
                                                                 task = task,
-                                                                onToggle = { viewModel.toggleTaskCompletion(context, task) },
+                                                                onToggle = {
+                                                                    if (task.syncId?.startsWith("repeat_from_") == true) {
+                                                                        taskToUndoRepeat = task
+                                                                    } else {
+                                                                        val isRecurring = !task.repeatMode.isNullOrBlank() && task.repeatMode != "None" && task.repeatMode != "Off"
+                                                                        viewModel.toggleTaskCompletion(context, task)
+                                                                        if (isRecurring && !task.isCompleted) {
+                                                                            scope.launch {
+                                                                                val res = snackbarHostState.showSnackbar(
+                                                                                    message = "Task repeated for next schedule",
+                                                                                    actionLabel = "Undo",
+                                                                                    duration = SnackbarDuration.Short
+                                                                                )
+                                                                                if (res == SnackbarResult.ActionPerformed) {
+                                                                                    viewModel.undoLastRepeat(context)
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                },
                                                                 onClick = {
                                                                     if (isSelectionMode) {
                                                                         if (task.id != null) {
@@ -1002,6 +1024,10 @@ fun HomeScreen(
                                                                     }
                                                                 },
                                                                 onRepeatToggle = { mode -> viewModel.toggleTaskRepeat(task, mode) },
+                                                                onUndoRepeat = {
+                                                                    viewModel.undoRepeatTask(context, task)
+                                                                    Toast.makeText(context, "Repeat undone. Task restored to today.", Toast.LENGTH_SHORT).show()
+                                                                },
                                                                 onStatusChange = { newStatus -> viewModel.updateTaskStatus(task, newStatus) },
                                                                 onCommentChange = { newComment -> viewModel.updateTaskComment(task, newComment) },
                                                                 onPriorityChange = { newPriority -> viewModel.updateTaskPriority(task, newPriority) },
@@ -1293,6 +1319,44 @@ fun HomeScreen(
                 taskToEdit?.let { viewModel.deleteTask(it, context) }
                 taskToEdit = null
                 showAddTask = false
+            }
+        )
+    }
+
+    // Dialog when tapping completion on a newly repeated task
+    if (taskToUndoRepeat != null) {
+        val targetTask = taskToUndoRepeat!!
+        AlertDialog(
+            onDismissRequest = { taskToUndoRepeat = null },
+            title = { Text("Task Recurrence Option") },
+            text = {
+                Text("This task was updated to its next repeat date from a previous completion. Would you like to undo the repeat and restore the original task, or complete this occurrence?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.undoRepeatTask(context, targetTask)
+                        Toast.makeText(context, "Repeat undone. Task restored to today.", Toast.LENGTH_SHORT).show()
+                        taskToUndoRepeat = null
+                    }
+                ) {
+                    Text("Undo Repeat")
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.toggleTaskCompletion(context, targetTask)
+                            taskToUndoRepeat = null
+                        }
+                    ) {
+                        Text("Complete Next")
+                    }
+                    TextButton(onClick = { taskToUndoRepeat = null }) {
+                        Text("Cancel")
+                    }
+                }
             }
         )
     }
@@ -2512,7 +2576,8 @@ fun TaskRow(
     onStatusChange: (String) -> Unit = {},
     onCommentChange: (String) -> Unit = {},
     onPriorityChange: (Int) -> Unit = {},
-    onStartFocus: () -> Unit = {}
+    onStartFocus: () -> Unit = {},
+    onUndoRepeat: (() -> Unit)? = null
 ) {
     val now = System.currentTimeMillis()
     val deadline = task.dueTime ?: task.dueDate
@@ -2758,6 +2823,18 @@ fun TaskRow(
                                     expanded = showRepeatMenu,
                                     onDismissRequest = { showRepeatMenu = false }
                                 ) {
+                                    val isRepeatClone = task.syncId?.startsWith("repeat_from_") == true
+                                    if (isRepeatClone && onUndoRepeat != null) {
+                                        DropdownMenuItem(
+                                            text = { Text("Undo Repeat", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) },
+                                            leadingIcon = { Icon(Icons.Filled.Refresh, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp)) },
+                                            onClick = {
+                                                onUndoRepeat()
+                                                showRepeatMenu = false
+                                            }
+                                        )
+                                        HorizontalDivider()
+                                    }
                                     DropdownMenuItem(
                                         text = { Text("Repeat: OFF", color = if (!isRepeating) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) },
                                         leadingIcon = { Icon(Icons.Outlined.Close, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp)) },
@@ -2770,10 +2847,10 @@ fun TaskRow(
                                     listOf("Hourly", "Daily", "Weekly", "Monthly", "Yearly").forEach { modeOption ->
                                         DropdownMenuItem(
                                             text = {
-                                                Text(
-                                                    text = "Repeat $modeOption",
-                                                    fontWeight = if (task.repeatMode == modeOption) FontWeight.Bold else FontWeight.Normal
-                                                )
+                                                 Text(
+                                                     text = "Repeat $modeOption",
+                                                     fontWeight = if (task.repeatMode == modeOption) FontWeight.Bold else FontWeight.Normal
+                                                 )
                                             },
                                             leadingIcon = {
                                                 Icon(
@@ -2787,6 +2864,36 @@ fun TaskRow(
                                                 onRepeatToggle(modeOption)
                                                 showRepeatMenu = false
                                             }
+                                        )
+                                    }
+                                }
+                            }
+
+                            val isRepeatClone = task.syncId?.startsWith("repeat_from_") == true
+                            if (isRepeatClone && onUndoRepeat != null) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                    border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                                    modifier = Modifier.clickable { onUndoRepeat() }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Refresh,
+                                            contentDescription = "Undo Repeat",
+                                            modifier = Modifier.size(11.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "Undo Repeat",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 10.sp
                                         )
                                     }
                                 }
