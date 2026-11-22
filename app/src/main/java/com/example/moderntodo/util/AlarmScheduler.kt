@@ -150,18 +150,22 @@ object AlarmScheduler {
 
     fun computeNextRepeatTime(task: TaskEntity, baseTime: Long, fromTime: Long): Long? {
         val interval = if (task.repeatInterval <= 0) 1 else task.repeatInterval
-        val unit = task.repeatUnit.ifBlank { "Days" }
+        val unit = if (task.repeatUnit.isNotBlank()) task.repeatUnit else when (task.repeatMode) {
+            "Hourly" -> "Hours"
+            "Weekly" -> "Weeks"
+            "Monthly" -> "Months"
+            "Yearly" -> "Years"
+            else -> "Days"
+        }
         val daysOfWeek = task.repeatDaysOfWeek?.split(",")?.map { it.trim().lowercase(Locale.ROOT) }?.filter { it.isNotBlank() }
 
         val cal = Calendar.getInstance().apply { timeInMillis = baseTime }
 
-        var count = 0
-        while (cal.timeInMillis <= fromTime && count < 500) {
-            count++
+        fun advanceStep() {
             if (!daysOfWeek.isNullOrEmpty()) {
                 do {
                     cal.add(Calendar.DAY_OF_YEAR, 1)
-                } while (!isDayOfWeekMatched(cal.get(Calendar.DAY_OF_WEEK), daysOfWeek) && count < 500)
+                } while (!isDayOfWeekMatched(cal.get(Calendar.DAY_OF_WEEK), daysOfWeek))
             } else {
                 when (unit.lowercase(Locale.ROOT)) {
                     "hours", "hour" -> cal.add(Calendar.HOUR_OF_DAY, interval)
@@ -171,6 +175,15 @@ object AlarmScheduler {
                     else -> cal.add(Calendar.DAY_OF_YEAR, interval)
                 }
             }
+        }
+
+        // Always advance AT LEAST once from baseTime
+        advanceStep()
+
+        var count = 0
+        while (cal.timeInMillis <= fromTime && count < 500) {
+            count++
+            advanceStep()
         }
 
         val nextTime = cal.timeInMillis

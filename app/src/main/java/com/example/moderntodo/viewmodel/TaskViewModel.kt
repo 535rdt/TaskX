@@ -773,7 +773,7 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                         val newRepeatMode = if (task.repeatEndsType == "After" && newEndsValue == null) null else task.repeatMode
 
                         // Ensure recurring next occurrence has exact future due timestamp
-                        val newDueDate = if (task.dueDate != null) nextTrigger else {
+                        val newDueDate = if (task.dueDate != null) {
                             val cal = Calendar.getInstance().apply {
                                 timeInMillis = nextTrigger
                                 set(Calendar.HOUR_OF_DAY, 0)
@@ -782,7 +782,7 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                                 set(Calendar.MILLISECOND, 0)
                             }
                             cal.timeInMillis
-                        }
+                        } else null
                         val newDueTime = if (task.dueTime != null) nextTrigger else null
 
                         val parentId = task.id ?: 0
