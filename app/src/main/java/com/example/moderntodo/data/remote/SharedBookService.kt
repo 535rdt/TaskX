@@ -433,7 +433,7 @@ object SharedBookService {
         for (item in payload.tasks) {
             val syncId = item.syncId.ifBlank { "task_${item.title.hashCode()}_${item.dueDate ?: 0}" }
             val matchedTask = localBySyncId[syncId] ?: remainingTasks.find {
-                it.title.trim().equals(item.title.trim(), ignoreCase = true)
+                it.title.trim().equals(item.title.trim(), ignoreCase = true) && it.dueDate == item.dueDate
             }
             if (matchedTask != null) {
                 remainingTasks.remove(matchedTask)
@@ -581,7 +581,7 @@ object SharedBookService {
             val cloudUpdatedAt = fetchCloudUpdatedAt(code)
 
             var pulled = false
-            if (force || cloudUpdatedAt == null || cloudUpdatedAt > lastSync) {
+            if (force || (cloudUpdatedAt != null && cloudUpdatedAt > lastSync)) {
                 val cloudPayload = fetchFromCloud(code)
                 if (cloudPayload != null) {
                     importSharedBook(context, repository, cloudPayload, currentUserName, currentUserEmail)
@@ -711,9 +711,14 @@ $token
     // -------------------------------------------------------------
     // SharedPreferences Helpers for Invite Codes & Members
     // -------------------------------------------------------------
-    private fun getPrefs(context: Context, userEmail: String?): android.content.SharedPreferences {
+    internal fun getPrefs(context: Context, userEmail: String?): android.content.SharedPreferences {
         val sanitized = com.example.moderntodo.data.local.AppDatabase.sanitizeUserEmail(userEmail)
         return context.getSharedPreferences("shared_books_meta_$sanitized", Context.MODE_PRIVATE)
+    }
+
+    fun recordSyncTimestamp(context: Context, bookId: Int, timestamp: Long, userEmail: String? = null) {
+        val email = userEmail ?: SettingsRepository.userEmailFlow.value
+        getPrefs(context, email).edit().putLong("last_sync_time_$bookId", timestamp).apply()
     }
 
     fun getSavedInviteCode(context: Context, bookId: Int, userEmail: String? = null): String? {

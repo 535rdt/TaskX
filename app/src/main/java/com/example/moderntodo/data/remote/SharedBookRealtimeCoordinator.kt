@@ -108,6 +108,7 @@ object SharedBookRealtimeCoordinator {
                     if (payload != null) {
                         SharedBookService.publishToCloud(payload)
                         _lastSyncTimestamp.value = System.currentTimeMillis()
+                        SharedBookService.recordSyncTimestamp(context, bookId, payload.updatedAt, userEmail)
                         Log.d(TAG, "Live mutation published for book $bookId ($inviteCode)")
                     }
                 }

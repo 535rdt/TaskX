@@ -749,7 +749,8 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                 val allBookTasks = repository.getTasksForBookList(task.bookId)
                 val duplicatePending = allBookTasks.filter { 
                     it.id != task.id && !it.isCompleted && 
-                    it.title.trim().equals(task.title.trim(), ignoreCase = true)
+                    it.title.trim().equals(task.title.trim(), ignoreCase = true) &&
+                    it.dueDate == task.dueDate
                 }
                 for (dup in duplicatePending) {
                     dup.id?.let {
@@ -803,20 +804,6 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                 }
             } else {
                 // Task was UNCOMPLETED (unchecked)
-                // Check if there is an active future recurrence cloned from this task and remove it
-                val allBookTasks = repository.getTasksForBookList(task.bookId)
-                val taskId = task.id
-                val futureClone = allBookTasks.find {
-                    !it.isCompleted && (
-                        (taskId != null && it.syncId?.startsWith("repeat_from_${taskId}_") == true) ||
-                        (it.title.trim().equals(task.title.trim(), ignoreCase = true) && it.id != task.id)
-                    )
-                }
-                if (futureClone != null && futureClone.id != null) {
-                    repository.deleteTask(futureClone)
-                    com.example.moderntodo.util.AlarmScheduler.cancel(context, futureClone.id)
-                }
-
                 if (updatedTask.hasAlarm || updatedTask.dueTime != null || updatedTask.dueDate != null) {
                     com.example.moderntodo.util.AlarmScheduler.schedule(context, updatedTask)
                 }

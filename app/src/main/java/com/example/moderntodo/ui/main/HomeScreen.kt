@@ -119,27 +119,7 @@ fun HomeScreen(
     val currentUserEmail by SettingsRepository.userEmailFlow.collectAsState()
     val isLiveSyncing by viewModel.isLiveSyncing.collectAsState()
 
-    // Silently publish all user lists to cloud so invite codes are immediately active
-    LaunchedEffect(currentUserEmail) {
-        SharedBookService.syncAllUserBooksToCloud(context, viewModel.repository, currentUserEmail)
-    }
-
-    // Catch-up sync whenever current list is viewed
-    LaunchedEffect(currentBookId, currentUserEmail) {
-        val inviteCode = SharedBookService.getSavedInviteCode(context, currentBookId, currentUserEmail)
-        if (!inviteCode.isNullOrBlank()) {
-            val userEmail = currentUserEmail ?: SettingsRepository.userEmailFlow.first()
-            val userName = if (!userEmail.isNullOrBlank()) userEmail.substringBefore("@") else "You"
-            SharedBookService.syncSharedBookCatchUp(
-                context = context,
-                repository = viewModel.repository,
-                bookId = currentBookId,
-                currentUserName = userName,
-                currentUserEmail = userEmail,
-                force = false
-            )
-        }
-    }
+    // Sync is handled by SharedBookRealtimeCoordinator background ticker when connected
 
     val currentBook = taskBooks.find { it.id == currentBookId }
     val clipboardManager = LocalClipboardManager.current
@@ -982,21 +962,17 @@ fun HomeScreen(
                                                             TaskRow(
                                                                 task = task,
                                                                 onToggle = {
-                                                                    if (task.syncId?.startsWith("repeat_from_") == true) {
-                                                                        taskToUndoRepeat = task
-                                                                    } else {
-                                                                        val isRecurring = !task.repeatMode.isNullOrBlank() && task.repeatMode != "None" && task.repeatMode != "Off"
-                                                                        viewModel.toggleTaskCompletion(context, task)
-                                                                        if (isRecurring && !task.isCompleted) {
-                                                                            scope.launch {
-                                                                                val res = snackbarHostState.showSnackbar(
-                                                                                    message = "Task repeated for next schedule",
-                                                                                    actionLabel = "Undo",
-                                                                                    duration = SnackbarDuration.Short
-                                                                                )
-                                                                                if (res == SnackbarResult.ActionPerformed) {
-                                                                                    viewModel.undoLastRepeat(context)
-                                                                                }
+                                                                    val isRecurring = !task.repeatMode.isNullOrBlank() && task.repeatMode != "None" && task.repeatMode != "Off"
+                                                                    viewModel.toggleTaskCompletion(context, task)
+                                                                    if (isRecurring && !task.isCompleted) {
+                                                                        scope.launch {
+                                                                            val res = snackbarHostState.showSnackbar(
+                                                                                message = "Task repeated for next schedule",
+                                                                                actionLabel = "Undo",
+                                                                                duration = SnackbarDuration.Short
+                                                                            )
+                                                                            if (res == SnackbarResult.ActionPerformed) {
+                                                                                viewModel.undoLastRepeat(context)
                                                                             }
                                                                         }
                                                                     }
