@@ -25,6 +25,9 @@ object SettingsRepository {
     private val _defaultRingtoneUriFlow = MutableStateFlow<String?>(null)
     val defaultRingtoneUriFlow: StateFlow<String?> = _defaultRingtoneUriFlow
 
+    private val _defaultAlarmRingtoneUriFlow = MutableStateFlow<String?>(null)
+    val defaultAlarmRingtoneUriFlow: StateFlow<String?> = _defaultAlarmRingtoneUriFlow
+
     private val _defaultAlarmEnabledFlow = MutableStateFlow(true)
     val defaultAlarmEnabledFlow: StateFlow<Boolean> = _defaultAlarmEnabledFlow
 
@@ -118,6 +121,7 @@ object SettingsRepository {
         _defaultReminderTimeFlow.value = prefs.getLong("default_reminder_time", 9L * 60 * 60 * 1000)
         _notificationsEnabledFlow.value = prefs.getBoolean("notifications_enabled", true)
         _defaultRingtoneUriFlow.value = prefs.getString("default_ringtone_uri", null)
+        _defaultAlarmRingtoneUriFlow.value = prefs.getString("default_alarm_ringtone_uri", null)
         _defaultAlarmEnabledFlow.value = prefs.getBoolean("default_alarm_enabled", true)
         // Default is false: Repeat tasks ONLY show on their due date (or overdue)
         _showUpcomingThreeDaysFlow.value = prefs.getBoolean("show_repeat_tasks_early", false)
@@ -150,6 +154,11 @@ object SettingsRepository {
     fun setDefaultRingtoneUri(uri: String?) {
         prefs.edit().putString("default_ringtone_uri", uri).apply()
         _defaultRingtoneUriFlow.value = uri
+    }
+
+    fun setDefaultAlarmRingtoneUri(uri: String?) {
+        prefs.edit().putString("default_alarm_ringtone_uri", uri).apply()
+        _defaultAlarmRingtoneUriFlow.value = uri
     }
 
     fun setDefaultAlarmEnabled(enabled: Boolean) {

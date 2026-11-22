@@ -39,10 +39,13 @@ fun SettingsScreen(onBack: () -> Unit) {
     val notificationsEnabled by SettingsRepository.notificationsEnabledFlow.collectAsState(initial = true)
     val defaultTime by SettingsRepository.defaultReminderTimeFlow.collectAsState(initial = 32400000L) // 9:00 AM
     val defaultRingtoneUri by SettingsRepository.defaultRingtoneUriFlow.collectAsState(initial = null)
+    val defaultAlarmRingtoneUri by SettingsRepository.defaultAlarmRingtoneUriFlow.collectAsState(initial = null)
     val defaultAlarmEnabled by SettingsRepository.defaultAlarmEnabledFlow.collectAsState(initial = true)
-    val showUpcomingThreeDays by SettingsRepository.showUpcomingThreeDaysFlow.collectAsState(initial = true)
+    val showUpcomingThreeDays by SettingsRepository.showUpcomingThreeDaysFlow.collectAsState(initial = false)
     val showCompletedSection by SettingsRepository.showCompletedSectionFlow.collectAsState(initial = true)
     val showTaskCountdown by SettingsRepository.showTaskCountdownFlow.collectAsState(initial = true)
+
+    var pickingSettingsSoundType by remember { mutableStateOf("notification") }
 
     val ringtonePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -56,8 +59,13 @@ fun SettingsScreen(onBack: () -> Unit) {
                     data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
                 }
             }
-            SettingsRepository.setDefaultRingtoneUri(uri?.toString())
-            Toast.makeText(context, "Default notification sound updated", Toast.LENGTH_SHORT).show()
+            if (pickingSettingsSoundType == "alarm") {
+                SettingsRepository.setDefaultAlarmRingtoneUri(uri?.toString())
+                Toast.makeText(context, "Default alarm sound updated", Toast.LENGTH_SHORT).show()
+            } else {
+                SettingsRepository.setDefaultRingtoneUri(uri?.toString())
+                Toast.makeText(context, "Default notification sound updated", Toast.LENGTH_SHORT).show()
+            }
         }
     }
     val currentEmail by SettingsRepository.userEmailFlow.collectAsState()
@@ -223,12 +231,33 @@ fun SettingsScreen(onBack: () -> Unit) {
                 title = "Default Notification Sound",
                 subtitle = SettingsRepository.getRingtoneTitle(context, defaultRingtoneUri),
                 onClick = {
+                    pickingSettingsSoundType = "notification"
                     val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
-                        putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION or RingtoneManager.TYPE_ALARM)
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION or RingtoneManager.TYPE_RINGTONE)
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Default Notification Sound")
                         putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
                         putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
                         if (!defaultRingtoneUri.isNullOrBlank()) {
                             putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(defaultRingtoneUri))
+                        }
+                    }
+                    ringtonePickerLauncher.launch(intent)
+                }
+            )
+
+            SettingsItem(
+                icon = Icons.Outlined.Alarm,
+                title = "Default Alarm Sound",
+                subtitle = SettingsRepository.getRingtoneTitle(context, defaultAlarmRingtoneUri),
+                onClick = {
+                    pickingSettingsSoundType = "alarm"
+                    val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM or RingtoneManager.TYPE_RINGTONE)
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Default Alarm Sound")
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                        putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
+                        if (!defaultAlarmRingtoneUri.isNullOrBlank()) {
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(defaultAlarmRingtoneUri))
                         }
                     }
                     ringtonePickerLauncher.launch(intent)

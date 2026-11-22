@@ -80,8 +80,17 @@ class AlarmReceiver : BroadcastReceiver() {
                 try { Uri.parse(ringtoneUriStr) } catch (_: Exception) { null }
             } else null
 
+            val defaultUriStr = if (hasAlarm) {
+                SettingsRepository.defaultAlarmRingtoneUriFlow.value
+            } else {
+                SettingsRepository.defaultRingtoneUriFlow.value
+            }
+            val defaultUri = if (!defaultUriStr.isNullOrBlank()) {
+                try { Uri.parse(defaultUriStr) } catch (_: Exception) { null }
+            } else null
+
             // When Full Alarm is ON: fallback to alarm sound; when OFF: fallback to notification sound
-            val soundUri: Uri = customUri ?: RingtoneManager.getDefaultUri(
+            val soundUri: Uri = customUri ?: defaultUri ?: RingtoneManager.getDefaultUri(
                 if (hasAlarm) RingtoneManager.TYPE_ALARM else RingtoneManager.TYPE_NOTIFICATION
             )
 

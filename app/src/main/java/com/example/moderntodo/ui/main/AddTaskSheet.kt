@@ -97,6 +97,7 @@ fun AddTaskSheet(
     val context = LocalContext.current
     val globalNotificationsEnabled by SettingsRepository.notificationsEnabledFlow.collectAsState()
     val globalDefaultRingtoneUri by SettingsRepository.defaultRingtoneUriFlow.collectAsState()
+    val globalDefaultAlarmRingtoneUri by SettingsRepository.defaultAlarmRingtoneUriFlow.collectAsState()
     val globalDefaultAlarmEnabled by SettingsRepository.defaultAlarmEnabledFlow.collectAsState()
 
     // 1. Task Core Properties
@@ -128,7 +129,22 @@ fun AddTaskSheet(
     var date by remember { mutableStateOf<Long?>(existingTask?.dueDate) }
     var time by remember { mutableStateOf<Long?>(existingTask?.dueTime) }
     var alarm by remember { mutableStateOf(existingTask?.hasAlarm ?: globalDefaultAlarmEnabled) }
-    var ringtoneUri by remember { mutableStateOf<String?>(existingTask?.ringtoneUri ?: globalDefaultRingtoneUri) }
+    var notificationSoundUri by remember {
+        mutableStateOf<String?>(
+            if (existingTask != null && !existingTask.hasAlarm) existingTask.ringtoneUri else globalDefaultRingtoneUri
+        )
+    }
+    var alarmSoundUri by remember {
+        mutableStateOf<String?>(
+            if (existingTask != null && existingTask.hasAlarm) existingTask.ringtoneUri else globalDefaultAlarmRingtoneUri
+        )
+    }
+    var pickingSoundType by remember { mutableStateOf("notification") }
+    var ringtoneUri by remember {
+        mutableStateOf<String?>(
+            existingTask?.ringtoneUri ?: (if (alarm) (globalDefaultAlarmRingtoneUri ?: globalDefaultRingtoneUri) else globalDefaultRingtoneUri)
+        )
+    }
     var isPlayingPreview by remember { mutableStateOf(false) }
     var activeRingtone by remember { mutableStateOf<Ringtone?>(null) }
 
@@ -204,8 +220,15 @@ fun AddTaskSheet(
                     data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
                 }
             }
+            val uriStr = uri?.toString()
+            if (pickingSoundType == "alarm") {
+                alarmSoundUri = uriStr
+                if (alarm) ringtoneUri = uriStr
+            } else {
+                notificationSoundUri = uriStr
+                if (!alarm) ringtoneUri = uriStr
+            }
             if (uri != null) {
-                ringtoneUri = uri.toString()
                 try {
                     activeRingtone?.stop()
                     val r = RingtoneManager.getRingtone(context, uri)
@@ -213,8 +236,6 @@ fun AddTaskSheet(
                     r?.play()
                     isPlayingPreview = true
                 } catch (_: Exception) {}
-            } else {
-                ringtoneUri = null
             }
         }
     }
@@ -897,6 +918,46 @@ fun AddTaskSheet(
                                     }
                                 }
 
+                                // Notification Sound Selector (Always visible & changeable!)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            pickingSoundType = "notification"
+                                            val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                                                putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION or RingtoneManager.TYPE_RINGTONE)
+                                                putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Select Notification Sound")
+                                                putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                                                putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
+                                                if (!notificationSoundUri.isNullOrBlank()) {
+                                                    putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(notificationSoundUri))
+                                                }
+                                            }
+                                            ringtonePickerLauncher.launch(intent)
+                                        }
+                                        .padding(vertical = 4.dp, horizontal = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Outlined.MusicNote, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Sound: ${getRingtoneTitle(context, notificationSoundUri)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Text(
+                                        text = "Change",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
                                 HorizontalDivider(
                                     modifier = Modifier.padding(vertical = 8.dp),
                                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
@@ -934,24 +995,29 @@ fun AddTaskSheet(
                                     }
                                     Switch(
                                         checked = alarm,
-                                        onCheckedChange = { alarm = it }
+                                        onCheckedChange = { isAlarm ->
+                                            alarm = isAlarm
+                                            ringtoneUri = if (isAlarm) (alarmSoundUri ?: notificationSoundUri) else (notificationSoundUri ?: alarmSoundUri)
+                                        }
                                     )
                                 }
 
                                 // 3. Full Alarm Ringtone Selector (when Full Alarm is ON)
                                 if (alarm) {
-                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(8.dp))
                                             .clickable {
+                                                pickingSoundType = "alarm"
                                                 val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
-                                                    putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM or RingtoneManager.TYPE_NOTIFICATION)
+                                                    putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM or RingtoneManager.TYPE_RINGTONE)
+                                                    putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Select Alarm Ringtone")
                                                     putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
                                                     putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
-                                                    if (!ringtoneUri.isNullOrBlank()) {
-                                                        putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(ringtoneUri))
+                                                    if (!alarmSoundUri.isNullOrBlank()) {
+                                                        putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(alarmSoundUri))
                                                     }
                                                 }
                                                 ringtonePickerLauncher.launch(intent)
@@ -961,10 +1027,10 @@ fun AddTaskSheet(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Outlined.MusicNote, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                                            Icon(Icons.Filled.Alarm, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "Alarm Sound: ${getRingtoneTitle(context, ringtoneUri)}",
+                                                text = "Alarm Sound: ${getRingtoneTitle(context, alarmSoundUri)}",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -973,7 +1039,7 @@ fun AddTaskSheet(
                                             text = "Change",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
+                                            color = MaterialTheme.colorScheme.error
                                         )
                                     }
                                 }
@@ -1614,13 +1680,14 @@ fun AddTaskSheet(
                                     }
                                 } else null
                                 val serializedSubTasks = subTasks.map { "${it.value.first}|${it.value.second}" }.joinToString(";;")
+                                val finalRingtoneUri = if (alarm) (alarmSoundUri ?: ringtoneUri) else (notificationSoundUri ?: ringtoneUri)
                                 onSave(
                                     title.trim(),
                                     desc.trim(),
                                     date,
                                     time,
                                     alarm,
-                                    ringtoneUri,
+                                    finalRingtoneUri,
                                     rMode,
                                     repeatInterval,
                                     repeatUnit,
