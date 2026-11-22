@@ -40,6 +40,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     val defaultTime by SettingsRepository.defaultReminderTimeFlow.collectAsState(initial = 32400000L) // 9:00 AM
     val defaultRingtoneUri by SettingsRepository.defaultRingtoneUriFlow.collectAsState(initial = null)
     val defaultAlarmEnabled by SettingsRepository.defaultAlarmEnabledFlow.collectAsState(initial = true)
+    val showUpcomingThreeDays by SettingsRepository.showUpcomingThreeDaysFlow.collectAsState(initial = true)
+    val showCompletedSection by SettingsRepository.showCompletedSectionFlow.collectAsState(initial = true)
 
     val ringtonePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -143,6 +145,51 @@ fun SettingsScreen(onBack: () -> Unit) {
                 icon = Icons.Outlined.AddBox,
                 title = "Quick Add",
                 onClick = { Toast.makeText(context, "Quick Add enabled", Toast.LENGTH_SHORT).show() }
+            )
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 4.dp))
+
+            // Task Display & Views Section
+            SettingsCategory(title = "Task Display & Lists")
+
+            SettingsItem(
+                icon = Icons.Outlined.Upcoming,
+                title = "Show Tasks 3 Days Early",
+                subtitle = if (showUpcomingThreeDays) "Tasks start showing 3 days before due date" else "Tasks only show on their due date (or overdue)",
+                trailing = {
+                    Switch(
+                        checked = showUpcomingThreeDays,
+                        onCheckedChange = { newState ->
+                            SettingsRepository.setShowUpcomingThreeDays(newState)
+                            Toast.makeText(context, if (newState) "3-day advance view turned ON" else "3-day advance view turned OFF", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                },
+                onClick = {
+                    val newState = !showUpcomingThreeDays
+                    SettingsRepository.setShowUpcomingThreeDays(newState)
+                    Toast.makeText(context, if (newState) "3-day advance view turned ON" else "3-day advance view turned OFF", Toast.LENGTH_SHORT).show()
+                }
+            )
+
+            SettingsItem(
+                icon = Icons.Outlined.CheckCircleOutline,
+                title = "Show Completed Tasks Section",
+                subtitle = if (showCompletedSection) "Completed tasks button visible on home screen" else "Completed tasks button hidden on home screen",
+                trailing = {
+                    Switch(
+                        checked = showCompletedSection,
+                        onCheckedChange = { newState ->
+                            SettingsRepository.setShowCompletedSection(newState)
+                            Toast.makeText(context, if (newState) "Completed section visible" else "Completed section hidden", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                },
+                onClick = {
+                    val newState = !showCompletedSection
+                    SettingsRepository.setShowCompletedSection(newState)
+                    Toast.makeText(context, if (newState) "Completed section visible" else "Completed section hidden", Toast.LENGTH_SHORT).show()
+                }
             )
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 4.dp))

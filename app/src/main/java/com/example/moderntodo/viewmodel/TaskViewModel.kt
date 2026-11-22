@@ -155,16 +155,15 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
     val pendingTasks: StateFlow<List<TaskEntity>> = combine(
         _currentBookId.flatMapLatest { bookId -> repository.getNormalPendingTasks(bookId) },
         filterCriteria,
-        _showAllUpcoming
-    ) { tasks, criteria, showUpcoming ->
+        _showAllUpcoming,
+        com.example.moderntodo.util.SettingsRepository.showUpcomingThreeDaysFlow
+    ) { tasks, criteria, showUpcoming, showThreeDaysEarly ->
         var filtered = tasks.filter { !it.isProjectTask }
 
         // Normal task section:
         // - Overdue tasks and tasks without a due date are always shown.
-        // - Non-recurring tasks start showing 3 days before due date.
+        // - Non-recurring tasks show 3 days before due date if showThreeDaysEarly is ON.
         // - Recurring tasks (Daily, Weekly, etc.): only show on the day they are due (or overdue).
-        //   When a user completes today's recurring task, the next occurrence (e.g. tomorrow) stays
-        //   neatly in upcoming so the current screen stays clean and completed!
         if (!showUpcoming && criteria.query.isBlank()) {
             val endOfToday = Calendar.getInstance().apply {
                 set(Calendar.HOUR_OF_DAY, 23)
@@ -184,7 +183,7 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
             filtered = filtered.filter { task ->
                 val due = task.dueDate ?: task.dueTime
                 val isRecurring = !task.repeatMode.isNullOrBlank() && task.repeatMode != "None" && task.repeatMode != "Off"
-                if (isRecurring) {
+                if (isRecurring || !showThreeDaysEarly) {
                     due == null || due <= endOfToday
                 } else {
                     due == null || due <= threeDaysAhead
@@ -213,8 +212,9 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
     @OptIn(ExperimentalCoroutinesApi::class)
     val hiddenUpcomingCount: StateFlow<Int> = combine(
         _currentBookId.flatMapLatest { bookId -> repository.getNormalPendingTasks(bookId) },
-        _showAllUpcoming
-    ) { tasks, showUpcoming ->
+        _showAllUpcoming,
+        com.example.moderntodo.util.SettingsRepository.showUpcomingThreeDaysFlow
+    ) { tasks, showUpcoming, showThreeDaysEarly ->
         if (showUpcoming) {
             0
         } else {
@@ -237,7 +237,7 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                 if (task.isProjectTask) return@count false
                 val due = task.dueDate ?: task.dueTime ?: return@count false
                 val isRecurring = !task.repeatMode.isNullOrBlank() && task.repeatMode != "None" && task.repeatMode != "Off"
-                if (isRecurring) {
+                if (isRecurring || !showThreeDaysEarly) {
                     due > endOfToday
                 } else {
                     due > threeDaysAhead

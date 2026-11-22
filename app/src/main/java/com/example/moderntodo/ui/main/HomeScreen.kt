@@ -75,6 +75,7 @@ fun HomeScreen(
     val currentBookId by viewModel.currentBookId.collectAsState()
     val hiddenUpcomingCount by viewModel.hiddenUpcomingCount.collectAsState()
     val showAllUpcoming by viewModel.showAllUpcoming.collectAsState()
+    val showCompletedSection by com.example.moderntodo.util.SettingsRepository.showCompletedSectionFlow.collectAsState()
 
     var currentBottomTab by remember { mutableStateOf("Tasks") }
     var taskToEdit by remember { mutableStateOf<TaskEntity?>(null) }
@@ -789,27 +790,29 @@ fun HomeScreen(
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
 
-                                            FilledTonalButton(
-                                                onClick = onNavigateToCompleted,
-                                                shape = RoundedCornerShape(12.dp),
-                                                colors = ButtonDefaults.filledTonalButtonColors(
-                                                    containerColor = Color(0xFF10B981).copy(alpha = 0.15f),
-                                                    contentColor = Color(0xFF10B981)
-                                                ),
-                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Filled.CheckCircle,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(16.dp),
-                                                    tint = Color(0xFF10B981)
-                                                )
-                                                Spacer(Modifier.width(6.dp))
-                                                Text(
-                                                    text = "Completed ($completedCount)",
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    fontWeight = FontWeight.Bold
-                                                )
+                                            if (showCompletedSection) {
+                                                FilledTonalButton(
+                                                    onClick = onNavigateToCompleted,
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                                        containerColor = Color(0xFF10B981).copy(alpha = 0.15f),
+                                                        contentColor = Color(0xFF10B981)
+                                                    ),
+                                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Filled.CheckCircle,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = Color(0xFF10B981)
+                                                    )
+                                                    Spacer(Modifier.width(6.dp))
+                                                    Text(
+                                                        text = "Completed ($completedCount)",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
                                             }
                                         }
 
@@ -824,7 +827,7 @@ fun HomeScreen(
                                                     .clickable { viewModel.toggleShowAllUpcoming() }
                                             ) {
                                                 Row(
-                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     Icon(
@@ -835,17 +838,16 @@ fun HomeScreen(
                                                     )
                                                     Spacer(Modifier.width(8.dp))
                                                     Text(
-                                                        text = if (showAllUpcoming) "Showing all upcoming tasks • Tap to hide >3 days" else "$hiddenUpcomingCount upcoming task${if (hiddenUpcomingCount > 1) "s" else ""} scheduled >3 days away • Tap to view",
+                                                        text = if (showAllUpcoming) "Showing all upcoming tasks" else "$hiddenUpcomingCount upcoming task${if (hiddenUpcomingCount > 1) "s" else ""} scheduled ahead",
                                                         style = MaterialTheme.typography.labelSmall,
                                                         fontWeight = FontWeight.Medium,
                                                         color = if (showAllUpcoming) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                                                         modifier = Modifier.weight(1f)
                                                     )
-                                                    Text(
-                                                        text = if (showAllUpcoming) "Hide" else "Show",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.primary
+                                                    Switch(
+                                                        checked = showAllUpcoming,
+                                                        onCheckedChange = { viewModel.toggleShowAllUpcoming() },
+                                                        modifier = Modifier.padding(start = 6.dp)
                                                     )
                                                 }
                                             }
@@ -928,13 +930,15 @@ fun HomeScreen(
                                                             }
                                                         }
 
-                                                        OutlinedButton(
-                                                            onClick = onNavigateToCompleted,
-                                                            shape = RoundedCornerShape(14.dp)
-                                                        ) {
-                                                            Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF10B981))
-                                                            Spacer(Modifier.width(8.dp))
-                                                            Text("Completed ($completedCount)", fontWeight = FontWeight.Bold)
+                                                        if (showCompletedSection) {
+                                                            OutlinedButton(
+                                                                onClick = onNavigateToCompleted,
+                                                                shape = RoundedCornerShape(14.dp)
+                                                            ) {
+                                                                Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF10B981))
+                                                                Spacer(Modifier.width(8.dp))
+                                                                Text("Completed ($completedCount)", fontWeight = FontWeight.Bold)
+                                                            }
                                                         }
                                                     }
                                                 }

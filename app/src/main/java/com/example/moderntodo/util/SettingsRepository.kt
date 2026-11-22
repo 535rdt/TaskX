@@ -28,6 +28,12 @@ object SettingsRepository {
     private val _defaultAlarmEnabledFlow = MutableStateFlow(true)
     val defaultAlarmEnabledFlow: StateFlow<Boolean> = _defaultAlarmEnabledFlow
 
+    private val _showUpcomingThreeDaysFlow = MutableStateFlow(true)
+    val showUpcomingThreeDaysFlow: StateFlow<Boolean> = _showUpcomingThreeDaysFlow
+
+    private val _showCompletedSectionFlow = MutableStateFlow(true)
+    val showCompletedSectionFlow: StateFlow<Boolean> = _showCompletedSectionFlow
+
     private val _accessTokenFlow = MutableStateFlow<String?>(null)
     val accessTokenFlow: StateFlow<String?> = _accessTokenFlow.asStateFlow()
 
@@ -110,6 +116,8 @@ object SettingsRepository {
         _notificationsEnabledFlow.value = prefs.getBoolean("notifications_enabled", true)
         _defaultRingtoneUriFlow.value = prefs.getString("default_ringtone_uri", null)
         _defaultAlarmEnabledFlow.value = prefs.getBoolean("default_alarm_enabled", true)
+        _showUpcomingThreeDaysFlow.value = prefs.getBoolean("show_upcoming_three_days", true)
+        _showCompletedSectionFlow.value = prefs.getBoolean("show_completed_section", true)
         _accessTokenFlow.value = prefs.getString("access_token", null)
         _refreshTokenFlow.value = prefs.getString("refresh_token", null)
 
@@ -142,6 +150,16 @@ object SettingsRepository {
     fun setDefaultAlarmEnabled(enabled: Boolean) {
         prefs.edit().putBoolean("default_alarm_enabled", enabled).apply()
         _defaultAlarmEnabledFlow.value = enabled
+    }
+
+    fun setShowUpcomingThreeDays(enabled: Boolean) {
+        prefs.edit().putBoolean("show_upcoming_three_days", enabled).apply()
+        _showUpcomingThreeDaysFlow.value = enabled
+    }
+
+    fun setShowCompletedSection(enabled: Boolean) {
+        prefs.edit().putBoolean("show_completed_section", enabled).apply()
+        _showCompletedSectionFlow.value = enabled
     }
 
     fun getRingtoneTitle(context: Context, uriStr: String?): String {
