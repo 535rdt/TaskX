@@ -2877,10 +2877,10 @@ fun TaskRow(
 
                             if (task.hasAlarm) {
                                 Icon(
-                                    imageVector = Icons.Filled.Notifications,
-                                    contentDescription = "Alarm",
-                                    modifier = Modifier.size(11.dp),
-                                    tint = MaterialTheme.colorScheme.secondary
+                                    imageVector = Icons.Filled.Alarm,
+                                    contentDescription = "Full Alarm",
+                                    modifier = Modifier.size(12.dp),
+                                    tint = MaterialTheme.colorScheme.error
                                 )
                             }
                         }

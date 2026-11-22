@@ -237,21 +237,21 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             SettingsItem(
                 icon = Icons.Outlined.Alarm,
-                title = "Default Alarm for Tasks",
-                subtitle = if (defaultAlarmEnabled) "Alarms enabled by default on new tasks" else "Alarms disabled by default on new tasks",
+                title = "Default Full Alarm for Tasks",
+                subtitle = if (defaultAlarmEnabled) "Full alarm enabled by default on new tasks" else "Notification only by default (full alarm off)",
                 trailing = {
                     Switch(
                         checked = defaultAlarmEnabled,
                         onCheckedChange = { newState ->
                             SettingsRepository.setDefaultAlarmEnabled(newState)
-                            Toast.makeText(context, if (newState) "Default alarm turned on" else "Default alarm turned off", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, if (newState) "Default full alarm turned ON" else "Default full alarm turned OFF (notification only)", Toast.LENGTH_SHORT).show()
                         }
                     )
                 },
                 onClick = {
                     val newState = !defaultAlarmEnabled
                     SettingsRepository.setDefaultAlarmEnabled(newState)
-                    Toast.makeText(context, if (newState) "Default alarm turned on" else "Default alarm turned off", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, if (newState) "Default full alarm turned ON" else "Default full alarm turned OFF (notification only)", Toast.LENGTH_SHORT).show()
                 }
             )
 

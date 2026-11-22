@@ -63,8 +63,8 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 
     companion object {
-        private const val CHANNEL_ID_DEFAULT = "task_reminders_channel_v3"
-        private const val CHANNEL_NAME = "Task Reminders & Alarms"
+        private const val CHANNEL_ID_NOTIFICATION = "task_notifications_channel_v1"
+        private const val CHANNEL_ID_ALARM = "task_full_alarm_channel_v1"
 
         fun showNotification(
             context: Context,
@@ -80,20 +80,25 @@ class AlarmReceiver : BroadcastReceiver() {
                 try { Uri.parse(ringtoneUriStr) } catch (_: Exception) { null }
             } else null
 
-            val soundUri: Uri = customUri ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            // When Full Alarm is ON: fallback to alarm sound; when OFF: fallback to notification sound
+            val soundUri: Uri = customUri ?: RingtoneManager.getDefaultUri(
+                if (hasAlarm) RingtoneManager.TYPE_ALARM else RingtoneManager.TYPE_NOTIFICATION
+            )
 
             val channelId = if (customUri != null) {
-                "task_sound_" + customUri.toString().hashCode().toString().replace("-", "n")
+                "task_sound_" + customUri.toString().hashCode().toString().replace("-", "n") + if (hasAlarm) "_alarm" else "_notif"
+            } else if (hasAlarm) {
+                CHANNEL_ID_ALARM
             } else {
-                CHANNEL_ID_DEFAULT
+                CHANNEL_ID_NOTIFICATION
             }
 
             // Create notification channel for Android 8.0+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val soundTitle = try {
-                    RingtoneManager.getRingtone(context, soundUri)?.getTitle(context) ?: "Custom Sound"
+                    RingtoneManager.getRingtone(context, soundUri)?.getTitle(context) ?: if (hasAlarm) "Full Alarm" else "Notification"
                 } catch (_: Exception) {
-                    "Custom Sound"
+                    if (hasAlarm) "Full Alarm" else "Notification"
                 }
 
                 val audioAttributes = AudioAttributes.Builder()
@@ -101,16 +106,22 @@ class AlarmReceiver : BroadcastReceiver() {
                     .setUsage(if (hasAlarm) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT)
                     .build()
 
+                val channelName = if (customUri != null) {
+                    if (hasAlarm) "Task Alarm ($soundTitle)" else "Task Notification ($soundTitle)"
+                } else {
+                    if (hasAlarm) "Task Alarms (Full Alarm)" else "Task Notifications"
+                }
+
                 val channel = NotificationChannel(
                     channelId,
-                    if (customUri != null) "Task Alert ($soundTitle)" else CHANNEL_NAME,
+                    channelName,
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "High priority notifications for due tasks and alarms"
+                    description = if (hasAlarm) "High priority ringing alarms for tasks" else "Standard notifications for due tasks"
                     enableLights(true)
-                    lightColor = Color.CYAN
+                    lightColor = if (hasAlarm) Color.RED else Color.CYAN
                     enableVibration(true)
-                    vibrationPattern = longArrayOf(0, 400, 200, 400, 200, 400)
+                    vibrationPattern = if (hasAlarm) longArrayOf(0, 500, 200, 500, 200, 500) else longArrayOf(0, 400, 200, 400)
                     setSound(soundUri, audioAttributes)
                     lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
                 }
@@ -130,10 +141,7 @@ class AlarmReceiver : BroadcastReceiver() {
             )
 
             // Direct vibration feedback so user notices immediately
-            triggerDirectVibration(context)
-
-            // Direct sound play to guarantee audibility
-            triggerDirectSound(context, soundUri)
+            triggerDirectVibration(context, hasAlarm)
 
             val builder = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.drawable.ic_task_notification)
@@ -145,10 +153,11 @@ class AlarmReceiver : BroadcastReceiver() {
                 .setCategory(if (hasAlarm) NotificationCompat.CATEGORY_ALARM else NotificationCompat.CATEGORY_REMINDER)
                 .setContentIntent(contentPendingIntent)
                 .setSound(soundUri)
-                .setVibrate(longArrayOf(0, 400, 200, 400, 200, 400))
+                .setVibrate(if (hasAlarm) longArrayOf(0, 500, 200, 500, 200, 500) else longArrayOf(0, 400, 200, 400))
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
             if (hasAlarm) {
+                // When Full Alarm is ON: Ring full alarm and pop up AlarmActivity
                 val activityIntent = Intent(context, com.example.moderntodo.ui.main.AlarmActivity::class.java).apply {
                     putExtra("EXTRA_TITLE", title)
                     putExtra("EXTRA_DESC", desc)
@@ -162,19 +171,28 @@ class AlarmReceiver : BroadcastReceiver() {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
                 builder.setFullScreenIntent(alarmPendingIntent, true)
+
+                try {
+                    context.startActivity(activityIntent)
+                } catch (e: Exception) {
+                    Log.w("AlarmReceiver", "Direct launch of AlarmActivity failed, falling back to full-screen intent", e)
+                }
+            } else {
+                // When Full Alarm is OFF: Only notification works
+                triggerDirectSound(context, soundUri)
             }
 
             try {
                 notificationManager.notify(taskId, builder.build())
-                Log.d("AlarmReceiver", "Notification posted successfully for task $taskId")
+                Log.d("AlarmReceiver", "Notification posted successfully for task $taskId (full alarm: $hasAlarm)")
             } catch (e: Exception) {
                 Log.e("AlarmReceiver", "Failed to post notification for task $taskId", e)
             }
         }
 
-        private fun triggerDirectVibration(context: Context) {
+        private fun triggerDirectVibration(context: Context, hasAlarm: Boolean = false) {
             try {
-                val pattern = longArrayOf(0, 400, 200, 400)
+                val pattern = if (hasAlarm) longArrayOf(0, 500, 200, 500, 200, 500) else longArrayOf(0, 400, 200, 400)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
                     vibratorManager?.defaultVibrator?.vibrate(VibrationEffect.createWaveform(pattern, -1))
