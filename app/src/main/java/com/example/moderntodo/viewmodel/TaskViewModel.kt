@@ -161,9 +161,9 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
         var filtered = tasks.filter { !it.isProjectTask }
 
         // Normal task section:
-        // - Overdue tasks and tasks without a due date are always shown.
-        // - Non-recurring tasks show 3 days before due date if showThreeDaysEarly is ON.
-        // - Recurring tasks (Daily, Weekly, etc.): only show on the day they are due (or overdue).
+        // - Single time tasks (non-recurring): always shown. The 3-day advance filter is NOT applicable to single-time tasks.
+        // - Recurring tasks (Daily, Weekly, etc.): only repeat tasks due within 3 days are shown (or only today if toggle is OFF).
+        //   Repeat tasks due further ahead are hidden into upcoming.
         if (!showUpcoming && criteria.query.isBlank()) {
             val endOfToday = Calendar.getInstance().apply {
                 set(Calendar.HOUR_OF_DAY, 23)
@@ -181,12 +181,20 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
             }.timeInMillis
 
             filtered = filtered.filter { task ->
-                val due = task.dueDate ?: task.dueTime
                 val isRecurring = !task.repeatMode.isNullOrBlank() && task.repeatMode != "None" && task.repeatMode != "Off"
-                if (isRecurring || !showThreeDaysEarly) {
-                    due == null || due <= endOfToday
+                if (!isRecurring) {
+                    // Single time task: NOT applicable to 3-day hide rule. Always show!
+                    true
                 } else {
-                    due == null || due <= threeDaysAhead
+                    // Repeat task: tasks due in 3 days show, other repeat tasks hide.
+                    val due = task.dueDate ?: task.dueTime
+                    if (due == null) {
+                        true
+                    } else if (showThreeDaysEarly) {
+                        due <= threeDaysAhead
+                    } else {
+                        due <= endOfToday
+                    }
                 }
             }
         }
@@ -235,12 +243,17 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
 
             tasks.count { task ->
                 if (task.isProjectTask) return@count false
-                val due = task.dueDate ?: task.dueTime ?: return@count false
                 val isRecurring = !task.repeatMode.isNullOrBlank() && task.repeatMode != "None" && task.repeatMode != "Off"
-                if (isRecurring || !showThreeDaysEarly) {
-                    due > endOfToday
+                if (!isRecurring) {
+                    // Single-time tasks are never hidden by 3-day rule
+                    false
                 } else {
-                    due > threeDaysAhead
+                    val due = task.dueDate ?: task.dueTime ?: return@count false
+                    if (showThreeDaysEarly) {
+                        due > threeDaysAhead
+                    } else {
+                        due > endOfToday
+                    }
                 }
             }
         }

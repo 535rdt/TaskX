@@ -2603,7 +2603,8 @@ fun TaskRow(
                     )
 
                     // Live countdown timer showing hours, minutes, seconds remaining
-                    if (!task.isCompleted && (task.dueTime != null || task.dueDate != null)) {
+                    val showCountdown by com.example.moderntodo.util.SettingsRepository.showTaskCountdownFlow.collectAsState()
+                    if (showCountdown && !task.isCompleted && (task.dueTime != null || task.dueDate != null)) {
                         Spacer(modifier = Modifier.height(3.dp))
                         LiveCountdownTimerBadge(task = task)
                     }

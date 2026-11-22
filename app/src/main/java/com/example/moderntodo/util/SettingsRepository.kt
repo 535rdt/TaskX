@@ -34,6 +34,9 @@ object SettingsRepository {
     private val _showCompletedSectionFlow = MutableStateFlow(true)
     val showCompletedSectionFlow: StateFlow<Boolean> = _showCompletedSectionFlow
 
+    private val _showTaskCountdownFlow = MutableStateFlow(true)
+    val showTaskCountdownFlow: StateFlow<Boolean> = _showTaskCountdownFlow
+
     private val _accessTokenFlow = MutableStateFlow<String?>(null)
     val accessTokenFlow: StateFlow<String?> = _accessTokenFlow.asStateFlow()
 
@@ -118,6 +121,7 @@ object SettingsRepository {
         _defaultAlarmEnabledFlow.value = prefs.getBoolean("default_alarm_enabled", true)
         _showUpcomingThreeDaysFlow.value = prefs.getBoolean("show_upcoming_three_days", true)
         _showCompletedSectionFlow.value = prefs.getBoolean("show_completed_section", true)
+        _showTaskCountdownFlow.value = prefs.getBoolean("show_task_countdown", true)
         _accessTokenFlow.value = prefs.getString("access_token", null)
         _refreshTokenFlow.value = prefs.getString("refresh_token", null)
 
@@ -160,6 +164,11 @@ object SettingsRepository {
     fun setShowCompletedSection(enabled: Boolean) {
         prefs.edit().putBoolean("show_completed_section", enabled).apply()
         _showCompletedSectionFlow.value = enabled
+    }
+
+    fun setShowTaskCountdown(enabled: Boolean) {
+        prefs.edit().putBoolean("show_task_countdown", enabled).apply()
+        _showTaskCountdownFlow.value = enabled
     }
 
     fun getRingtoneTitle(context: Context, uriStr: String?): String {
