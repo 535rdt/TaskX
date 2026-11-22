@@ -2575,12 +2575,12 @@ fun TaskRow(
                         modifier = Modifier.size(28.dp)
                     )
                 } else {
-                    IconButton(onClick = onToggle, modifier = Modifier.size(28.dp)) {
+                    IconButton(onClick = onToggle, modifier = Modifier.size(36.dp)) {
                         Icon(
                             imageVector = if (task.isCompleted) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
                             contentDescription = "Complete",
                             tint = if (task.isCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }

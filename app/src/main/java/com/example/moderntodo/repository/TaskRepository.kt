@@ -324,7 +324,29 @@ class TaskRepository(
                     }
                 }
 
-                // 3. Cancel alarms for purged duplicates
+                // 3. Purge any duplicate pending tasks sharing the same bookId and title
+                val pendingOnly = taskDao.getAllTasksList().filter { !it.isCompleted }
+                val titleGroups = pendingOnly.groupBy {
+                    "${it.bookId}_${it.title.trim().lowercase(java.util.Locale.ROOT)}"
+                }
+                for ((_, list) in titleGroups) {
+                    if (list.size > 1) {
+                        val sorted = list.sortedWith(
+                            compareByDescending<TaskEntity> { it.dueDate ?: 0L }
+                                .thenByDescending { it.id ?: 0 }
+                        )
+                        val toKeep = sorted.first()
+                        val toDelete = sorted.drop(1)
+                        for (dup in toDelete) {
+                            dup.id?.let {
+                                taskDao.deleteTaskById(it)
+                                deletedIds.add(it)
+                            }
+                        }
+                    }
+                }
+
+                // 4. Cancel alarms for purged duplicates
                 if (deletedIds.isNotEmpty()) {
                     Log.d("TaskRepository", "Cleaned up ${deletedIds.size} duplicate tasks from database")
                     try {

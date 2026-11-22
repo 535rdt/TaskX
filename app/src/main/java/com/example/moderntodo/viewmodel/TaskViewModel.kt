@@ -159,10 +159,20 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
     ) { tasks, criteria, showUpcoming ->
         var filtered = tasks.filter { !it.isProjectTask }
 
-        // Normal task section: tasks start showing 3 days before due date
-        // Overdue tasks and tasks without a due date are always shown.
-        // If the user searches by text or toggles showAllUpcoming, future tasks are surfaced.
+        // Normal task section:
+        // - Overdue tasks and tasks without a due date are always shown.
+        // - Non-recurring tasks start showing 3 days before due date.
+        // - Recurring tasks (Daily, Weekly, etc.): only show on the day they are due (or overdue).
+        //   When a user completes today's recurring task, the next occurrence (e.g. tomorrow) stays
+        //   neatly in upcoming so the current screen stays clean and completed!
         if (!showUpcoming && criteria.query.isBlank()) {
+            val endOfToday = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 23)
+                set(Calendar.MINUTE, 59)
+                set(Calendar.SECOND, 59)
+                set(Calendar.MILLISECOND, 999)
+            }.timeInMillis
+
             val threeDaysAhead = Calendar.getInstance().apply {
                 add(Calendar.DAY_OF_YEAR, 3)
                 set(Calendar.HOUR_OF_DAY, 23)
@@ -173,7 +183,12 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
 
             filtered = filtered.filter { task ->
                 val due = task.dueDate ?: task.dueTime
-                due == null || due <= threeDaysAhead
+                val isRecurring = !task.repeatMode.isNullOrBlank() && task.repeatMode != "None" && task.repeatMode != "Off"
+                if (isRecurring) {
+                    due == null || due <= endOfToday
+                } else {
+                    due == null || due <= threeDaysAhead
+                }
             }
         }
 
@@ -203,6 +218,13 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
         if (showUpcoming) {
             0
         } else {
+            val endOfToday = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 23)
+                set(Calendar.MINUTE, 59)
+                set(Calendar.SECOND, 59)
+                set(Calendar.MILLISECOND, 999)
+            }.timeInMillis
+
             val threeDaysAhead = Calendar.getInstance().apply {
                 add(Calendar.DAY_OF_YEAR, 3)
                 set(Calendar.HOUR_OF_DAY, 23)
@@ -212,7 +234,14 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
             }.timeInMillis
 
             tasks.count { task ->
-                !task.isProjectTask && ((task.dueDate ?: task.dueTime)?.let { it > threeDaysAhead } ?: false)
+                if (task.isProjectTask) return@count false
+                val due = task.dueDate ?: task.dueTime ?: return@count false
+                val isRecurring = !task.repeatMode.isNullOrBlank() && task.repeatMode != "None" && task.repeatMode != "Off"
+                if (isRecurring) {
+                    due > endOfToday
+                } else {
+                    due > threeDaysAhead
+                }
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
@@ -700,6 +729,19 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
             if (isNowCompleted) {
                 com.example.moderntodo.util.AlarmScheduler.cancel(context, task.id ?: 0)
                 
+                // Purge any lingering duplicate pending copies of this same task to avoid ghost rows
+                val allBookTasks = repository.getTasksForBookList(task.bookId)
+                val duplicatePending = allBookTasks.filter { 
+                    it.id != task.id && !it.isCompleted && 
+                    it.title.trim().equals(task.title.trim(), ignoreCase = true)
+                }
+                for (dup in duplicatePending) {
+                    dup.id?.let {
+                        repository.deleteTask(dup)
+                        com.example.moderntodo.util.AlarmScheduler.cancel(context, it)
+                    }
+                }
+
                 // Handle repetition
                 if (task.repeatMode != null && task.repeatMode != "None" && task.repeatMode != "Off") {
                     val now = System.currentTimeMillis()
@@ -713,7 +755,17 @@ class TaskViewModel(val repository: TaskRepository) : ViewModel() {
                         } else task.repeatEndsValue
                         val newRepeatMode = if (task.repeatEndsType == "After" && newEndsValue == null) null else task.repeatMode
 
-                        val newDueDate = if (task.dueDate != null) nextTrigger else null
+                        // Ensure recurring next occurrence has exact future due timestamp
+                        val newDueDate = if (task.dueDate != null) nextTrigger else {
+                            val cal = Calendar.getInstance().apply {
+                                timeInMillis = nextTrigger
+                                set(Calendar.HOUR_OF_DAY, 0)
+                                set(Calendar.MINUTE, 0)
+                                set(Calendar.SECOND, 0)
+                                set(Calendar.MILLISECOND, 0)
+                            }
+                            cal.timeInMillis
+                        }
                         val newDueTime = if (task.dueTime != null) nextTrigger else null
 
                         val clonedTask = task.copy(
